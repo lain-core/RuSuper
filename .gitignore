@@ -1,1 +1,5 @@
-/target
+target/*
+data/*
+*.sfc
+*.smc
+.vscode/*
