@@ -33,11 +33,17 @@ fn init(file: &str) -> VirtualMachine {
 
     /* Determine if file exists, open, load to memory */
     let path = Path::new(file);
-    let mut file = fs::File::open(path);
+    let file = fs::File::open(path);
 
+    println!("Opening file {}", path.display());
     if let Ok(mut file) = file {
         let mut contents = String::new();
-        file.read_to_string(&mut contents);
+        match file.read_to_string(&mut contents) {
+            Ok(_) => println!("Contents:\n{}", contents),
+            Err(e) => println!("Error occurred: {}", e),
+        }
+    } else {
+        println!("Failed to open file: {}", file.unwrap_err());
     }
 
     new_instance
