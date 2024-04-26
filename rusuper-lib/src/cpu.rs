@@ -1,4 +1,6 @@
+// Instructions mod declarations
 mod branch;
+
 #[derive(Debug)]
 pub struct CpuState {
     acc: u16,         /* Accumulator TODO: Union this         */
@@ -12,7 +14,7 @@ pub struct CpuState {
 
 /* Associated Functions */
 impl CpuState {
-    pub const fn empty() -> Self {
+    pub const fn new() -> Self {
         Self {
             acc: 0x0000,
             pc: 0x0000,
