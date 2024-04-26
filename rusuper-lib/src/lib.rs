@@ -1,5 +1,6 @@
 use std::fs;
-use std::path::Path;
+use std::io::Read;
+use std::path::PathBuf;
 
 mod cpu;
 mod memory;
@@ -17,20 +18,20 @@ struct VirtualMachine {
 /// 
 /// # Parameters
 /// - `file`: Target file to open
-pub fn init(file: &str) {    
+pub fn init(path: &mut PathBuf) {    
     let mut vm =  VirtualMachine {
         cpu: cpu::CpuState::new(),
         memory: memory::Memory::new(),
     };
 
-    // Determine if file exists, open, load to memory
-    let path = Path::new(file);
-    if let Ok(file) = fs::File::open(path){
+    if let Ok(file) = fs::File::open(&path){
         memory::load(&mut vm.memory, file);
     }
     else {
         println!("Failed to read file {}", path.display());
     }
+
+    // vm.memory.dump();
 
     // Start Running.
     // TODO: find a way to pace this correctly.
