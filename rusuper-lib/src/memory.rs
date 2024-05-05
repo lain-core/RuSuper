@@ -34,20 +34,24 @@ impl Memory {
         println!(
             "        0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0A 0x0B 0x0C 0x0D 0x0E 0x0F"
         );
-        let mut baseaddr: usize = (target_bank as usize) << MEMORY_BANK_INDEX;
+        let bank_index: usize = (target_bank as usize) << MEMORY_BANK_INDEX;
 
-        for byte_bank_index in 0..(MEMORY_BANK_SIZE + 1) {
-            if byte_bank_index % 0x10 == 0
+        for row_index in 0..(MEMORY_BANK_SIZE + 1) {
+            let byte_index = bank_index | row_index;
+            let byte_value = &self.memory[byte_index];
+
+            if byte_index % 0x10 == 0
             {
-                print!("\n{:#06X}: [", (baseaddr | byte_bank_index));
-                print!(" {:#04X}, ", &self.memory[baseaddr | byte_bank_index]);
+                // Stupid: The width specifier for hex formatting applies to the leading "0x" also; all widths must be +2.
+                print!("\n{:#06X}: [", byte_index);
+                print!(" {:#04X}, ", byte_value);
             }
-            else if byte_bank_index % 0x10 == 0x0F
+            else if byte_index % 0x10 == 0x0F
             {
-                print!("{:#04X} ]", &self.memory[baseaddr | byte_bank_index]);
+                print!("{:#04X} ]", byte_value);
             }
             else {
-                print!("{:#04X}, ", &self.memory[baseaddr | byte_bank_index]);
+                print!("{:#04X}, ", byte_value);
             }
         }
     }
