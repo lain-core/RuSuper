@@ -50,6 +50,8 @@ fn execute(state: &mut CpuState, inst: CpuInstruction) {
     match inst {
         CpuInstruction::ADD { x } => state.acc += x, // CpuState.acc += inst.x,
         CpuInstruction::NOP => (),
-        _ => (),
+        _ => {
+            panic!("Unimplemented instruction found!\n");
+        },
     }
 }
