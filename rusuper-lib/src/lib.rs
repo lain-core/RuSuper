@@ -37,7 +37,7 @@ pub fn init(path: &mut PathBuf) {
         // Check if the vm is running and step if so.
         // This is not self-contained in a loop because the outside will contain debugger functions in the future.
         if vm_running {
-            vm.cpu.step();
+            vm.cpu.step(&mut vm.memory);
         }
     }
 

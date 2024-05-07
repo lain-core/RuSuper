@@ -37,7 +37,7 @@ impl CpuState {
         self.pc
     }
 
-    pub fn step(&self, mem: &mut Memory) {
+    pub fn step(&mut self, mem: &mut Memory) {
         let next_instruction = self.fetch(&mem);
         let next_decoded_instruction = self.decode(next_instruction);
         self.execute(next_decoded_instruction);
@@ -65,7 +65,7 @@ impl CpuState {
         CpuInstruction::new()
     }
 
-    fn execute(&self, inst: CpuInstruction) {
+    fn execute(&mut self, inst: CpuInstruction) {
         match inst.opcode {
             CpuOpcode::ADD { x } => self.acc += x, // CpuState.acc += inst.x,
             CpuOpcode::NOP => (),
@@ -86,7 +86,7 @@ impl CpuInstruction {
         Self { opcode: CpuOpcode::NOP, parameters: 0 }
     }
 
-    pub const fn set_opcode(&self, data: u16) {
+    fn set_opcode(&mut self, data: u16) {
         match data {
             0x0000 => self.opcode = CpuOpcode::NOP,
             _ => {
