@@ -1,11 +1,11 @@
-use std::{fs, io::{BufReader, Read}};
+use std::{fs, io::Read};
 /* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
 
 const MEMORY_SIZE: usize            = 0xFFFFFF;
-const MEMORY_END:  usize            = 0x7FFFFF; /// Memory commonly ends at bank $7F https://ersanio.gitbook.io/assembly-for-the-snes/the-fundamentals/memory
-const MEMORY_BANK_COUNT: usize      =     0xFF; /// Number of addressable memory banks.
-const MEMORY_BANK_SIZE: usize       =   0xFFFF; /// Size of one memory bank.
-const MEMORY_BANK_INDEX: u8         = 16;       /// Bit index to shift a u8 by to obtain a bank address.
+pub const MEMORY_END:  usize            = 0x7FFFFF; /// Memory commonly ends at bank $7F https://ersanio.gitbook.io/assembly-for-the-snes/the-fundamentals/memory
+pub const MEMORY_BANK_COUNT: usize      =     0xFF; /// Number of addressable memory banks.
+pub const MEMORY_BANK_SIZE: usize       =   0xFFFF; /// Size of one memory bank.
+pub const MEMORY_BANK_INDEX: u8         = 16;       /// Bit index to shift a u8 by to obtain a bank address.
 
 /// Individual
 /// TODO: Do I need to make a better structure for this?
@@ -17,7 +17,6 @@ pub struct Memory {
 }
 
 impl Memory {
-    
     /// Creates a new instance of a Memory object, with all addresses initialized to 0.
     pub fn new() -> Self {
         let mut new_memory = Memory {
@@ -29,6 +28,7 @@ impl Memory {
 
     /// Visually dump a bank to stdout.
     /// # Parameters
+    ///     - `self`:           Pointer to object containing memory to dump.
     ///     - `target_bank`:    Target bank to print to screen.
     pub fn dump_bank(&self, target_bank: u8) {
         println!(
@@ -64,4 +64,32 @@ impl Memory {
         let read_result = file.read_to_end(&mut self.memory).unwrap();
         println!("Read {} bytes", read_result);
     }
+
+    /// Return one byte from memory.
+    /// # Parameters:
+    ///     - `self`: Pointer to memory object which contains memory to read from.
+    ///     - `address`: Address of byte to fetch.
+    /// # Returns:
+    ///     - Byte value at that address.
+    pub fn get_byte(&self, address: usize) -> u8 {
+        self.memory[address]
+    }
+
+    /// Return a constructed word from memory.
+    /// # Parameters:
+    ///     - `self`: Pointer to memory object which contains memory to read from.
+    ///     - `address`: Address of byte to fetch.
+    pub fn get_word(&self, address: usize) -> u16 {
+        self.memory[address] as u16 | (self.memory[address + 1] as u16) << 8
+    }
+}
+
+/// Given an 8-bit bank reference and a 16-bit address within that bank, return the composed address that points to.
+/// # Parameters:
+///     - `bank`:       An 8-bit bank address.
+///     - `byte_addr`:  A 16-bit address within a bank.
+/// # Returns:
+///     - Composed full address of a byte in memory.
+pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
+    ((bank as usize) << MEMORY_BANK_INDEX) | byte_addr as usize
 }

@@ -4,8 +4,6 @@ use std::path::PathBuf;
 mod cpu;
 mod memory;
 
-use cpu::CpuInstruction;
-
 /// VM Struct which contains the individual pieces of the system.
 struct VirtualMachine {
     cpu: cpu::CpuState,
@@ -32,12 +30,15 @@ pub fn init(path: &mut PathBuf) {
         println!("Failed to read file {}", path.display());
     }
 
-    vm.memory.dump_bank(0x00);
+    // Debugger loop which parses user inputs. 
+    loop {
+        let mut vm_running = true;
 
-    // Start Running.
-    // TODO: find a way to pace this correctly.
-    // loop {
-    //     cpu::step(&mut vm.cpu, CpuInstruction::NOP);
-    //     break;
-    // }
+        // Check if the vm is running and step if so.
+        // This is not self-contained in a loop because the outside will contain debugger functions in the future.
+        if vm_running {
+            vm.cpu.step();
+        }
+    }
+
 }
