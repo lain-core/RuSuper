@@ -55,9 +55,13 @@ fn run(mut vm: VirtualMachine) {
         // This is not self-contained in a loop because the outside will contain debugger functions in the future.
         if vm_running && (vm.cpu.cycles_to_pend == 0) {
             vm_running = vm.cpu.step(&mut vm.memory);
+            println!("Next instruction stalled by {} cycles", vm.cpu.cycles_to_pend);
         }
-        else {
+        else if vm.cpu.cycles_to_pend > 0 {
             vm.cpu.cycles_to_pend -= 1;
+        }
+        else{
+            break;
         }
     }
 }
