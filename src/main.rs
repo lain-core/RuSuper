@@ -1,5 +1,6 @@
+use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 mod cpu;
 mod memory;
@@ -23,20 +24,31 @@ impl VirtualMachine {
 /// 
 /// # Parameters
 /// - `file`: Target file to open
-pub fn init(path: &mut PathBuf) {
-    println!("Initializing library");
+pub fn main() {
+    let args: Vec<String> = env::args().collect();
 
-    let mut vm = VirtualMachine::new();
+    if args.len() > 1 {
+        let path = std::fs::canonicalize(Path::new(&args[1])).expect(
+            "File not found"
+        );
 
-    if let Ok(file) = fs::File::open(&path){
-        println!("Reading file {}", &path.display());
-        vm.memory.load_rom(file);
+        // Initialize the VM and then load the ROM into memory.
+        let mut vm = VirtualMachine::new();
+        if let Ok(file) = fs::File::open(&path){
+            println!("Reading file {}", &path.display());
+            vm.memory.load_rom(file);
+        }
+        else {
+            println!("Failed to read file {}", path.display());
+        }
+    
+        // Start Running.
+        run(vm);
     }
     else {
-        println!("Failed to read file {}", path.display());
+        println!("You must specify a *.sfc file to run!");
     }
 
-    run(vm);
 }
 
 /// Run the core.

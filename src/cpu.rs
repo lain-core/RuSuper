@@ -114,7 +114,7 @@ impl From<u8> for CpuInstruction {
 
         match value {
             // And many more
-            0xDB => { opcode = CpuOpcode::STP; width = CpuParamWidth::SHORT; function = Some(misc::stp)     },
+            0xDB => { opcode = CpuOpcode::STP; width = CpuParamWidth::NO; function = Some(misc::stp)     },
             0xEA => { opcode = CpuOpcode::NOP; width = CpuParamWidth::NO;    function = Some(misc::nop)     },
             _ =>    { opcode = CpuOpcode::NOP; width = CpuParamWidth::NO;    function = None                }
         }

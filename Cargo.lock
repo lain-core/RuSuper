@@ -3,12 +3,5 @@
 version = 3
 
 [[package]]
-name = "rusuper-bin"
-version = "0.1.0"
-dependencies = [
- "rusuper-lib",
-]
-
-[[package]]
-name = "rusuper-lib"
+name = "rusuper"
 version = "0.1.0"

@@ -1,5 +1,5 @@
 [package]
-name = "rusuper-lib"
+name = "rusuper"
 version = "0.1.0"
 edition = "2021"
 
