@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{fs, io::Read, ops::Add};
+use std::{fs, io::Read};
 /* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
 
 const MEMORY_SIZE: usize                = (0xFFFFFF) + 1;   // Total memory is addressable from 0x000000 - 0xFFFFFF
@@ -12,16 +12,31 @@ pub const MEMORY_BANK_INDEX: u8         = 16;               // Bit index to shif
 /// TODO: Do I need to make a better structure for this?
 const LOW_RAM_MIRROR: usize         =   0x0000;
 const HW_REGISTERS: usize           =   0x2000;
+pub const ROM_START_ADDR: usize         =   0x008000;
+pub const ROM_END_ADDR: usize           =   0x7DFFFF;
 
+enum MemoryMode {
+    LOROM,
+    HIROM,
+    EXHIROM,
+}
+
+
+// TODO: probably make a rom header struct
+
+/// Structure to represent memory.
+/// Really just a wrapper for a vector; we are doing this to avoid implementing file-scope global state.
 pub struct Memory {
-    memory: Vec<u8>
+    memory: Vec<u8>,
+    mode:   MemoryMode
 }
 
 impl Memory {
     /// Creates a new instance of a Memory object, with all addresses initialized to 0.
     pub fn new() -> Self {
         let new_memory = Memory {
-            memory: Vec::with_capacity(MEMORY_SIZE)
+            memory: Vec::with_capacity(MEMORY_SIZE),
+            mode: MemoryMode::LOROM
         };
 
         new_memory
@@ -62,7 +77,12 @@ impl Memory {
     ///     - `self`:    Pointer to memory object which contains memory to write file to.
     ///     - `file`:    file to read the data from
     pub fn load_rom(&mut self, mut file: fs::File) {
-        let read_result = file.read_to_end(&mut self.memory).unwrap();
+        let mut buf: Vec<u8>;
+        // TODO: This needs to adjust itself dependent on the size of rom as determined from the headers.
+        // TODO: What to do with headers? Break it out as it's own thing or deal with it here?
+        // https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map
+        // https://snes.nesdev.org/wiki/Memory_map
+        let read_result = file.read(&mut self.memory[ROM_START_ADDR .. ROM_END_ADDR]).unwrap();
         println!("Read {} bytes", read_result);
     }
 
@@ -75,11 +95,11 @@ impl Memory {
     ///     - `Err(e)`      If the arument was invalid
     pub fn get_byte(&self, address: usize) -> Result<u8, AddressOutOfBoundsError> {
         match address_is_valid(address) {
-            Ok(_T) => {
+            Ok(_t) => {
                 Ok(self.memory[address])
             }
-            Err(E) => {
-                Err(E)
+            Err(e) => {
+                Err(e)
             }
         }
     }
@@ -93,11 +113,11 @@ impl Memory {
     ///     - `Err(e)`      If the arument was invalid
     pub fn get_word(&self, address: usize) -> Result<u16, AddressOutOfBoundsError> {
         match address_is_valid(address) {
-            Ok(_T) => {
+            Ok(_t) => {
                 Ok(self.memory[address] as u16 | (self.memory[address + 1] as u16) << 8)
             }
-            Err(E) => {
-                Err(E)
+            Err(e) => {
+                Err(e)
             }
         }
         
@@ -110,12 +130,12 @@ impl Memory {
     ///     - `word`:       Word to write.
     pub fn put_byte(&mut self, address: usize, byte: u8) -> Result<(), AddressOutOfBoundsError> {
         match address_is_valid(address) {
-            Ok(_T) => {
+            Ok(_t) => {
                 self.memory[address] = byte;
                 Ok(())
             }
-            Err(E) => {
-                Err(E)
+            Err(e) => {
+                Err(e)
             }
         }
     }
@@ -127,18 +147,19 @@ impl Memory {
     ///     - `word`:       Word to write.
     pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), AddressOutOfBoundsError> {
         match address_is_valid(address) {
-            Ok(_T) => {
+            Ok(_t) => {
                 self.memory[address]        = ((word & 0xFF00) >> 8) as u8;
                 self.memory[address + 1]    = (word & 0x00FF) as u8;
                 Ok(())
             }
-            Err(E) => {
-                Err(E)
+            Err(e) => {
+                Err(e)
             }
         }
     }
 }
 
+/// Struct for an OutOfBoundsError on being passed a bad index.
 #[derive(Debug, Clone)]
 pub struct AddressOutOfBoundsError {
     addr: usize
@@ -157,6 +178,8 @@ impl fmt::Display for AddressOutOfBoundsError {
         write!(f, "Address index {:#08x} out of bounds", self.addr)
     }
 }
+
+/***** File-scope functions *****/
 
 /// Given an 8-bit bank reference and a 16-bit address within that bank, return the composed address that points to.
 /// # Parameters:
@@ -180,5 +203,17 @@ pub fn address_is_valid(address: usize) -> Result<(), AddressOutOfBoundsError> {
     }
     else {
         Err(AddressOutOfBoundsError::new(address))
+    }
+}
+
+/***** Tests *****/
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::random;
+
+    #[test]
+    fn test_load_rom() {
+        
     }
 }

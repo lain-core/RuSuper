@@ -32,18 +32,23 @@ pub fn main() {
             "File not found"
         );
 
-        // Initialize the VM and then load the ROM into memory.
-        let mut vm = VirtualMachine::new();
-        if let Ok(file) = fs::File::open(&path){
-            println!("Reading file {}", &path.display());
-            vm.memory.load_rom(file);
+        if path.extension().unwrap() == "smc" {
+            println!("SMC files contain extra data which is not handled correctly by this tool yet.\nPlease use an SFC file.")
         }
-        else {
-            println!("Failed to read file {}", path.display());
+        else{
+            // Initialize the VM and then load the ROM into memory.
+            let mut vm = VirtualMachine::new();
+            if let Ok(file) = fs::File::open(&path){
+                println!("Reading file {}", &path.display());
+                vm.memory.load_rom(file);
+            }
+            else {
+                println!("Failed to read file {}", path.display());
+            }
+        
+            // Start Running.
+            cpu::run(vm);
         }
-    
-        // Start Running.
-        cpu::run(vm);
     }
     else {
         println!("You must specify a *.sfc file to run!");

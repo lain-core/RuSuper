@@ -1,6 +1,6 @@
 use std::time;
 
-use crate::{memory, VirtualMachine};
+use crate::{memory::{self, ROM_START_ADDR}, VirtualMachine};
 
 // Instructions mod declarations
 
@@ -349,7 +349,7 @@ impl CpuState {
     pub const fn new() -> Self {
         Self {
             acc: 0x0000,
-            pc: 0x0000,
+            pc: ROM_START_ADDR as u16,
             sp: 0x0000,
             flags: 0x00,
             direct_page: 0x0000,
