@@ -1,6 +1,6 @@
-use std::mem::size_of;
+use std::time;
 
-use crate::memory;
+use crate::{memory, VirtualMachine};
 
 // Instructions mod declarations
 
@@ -10,17 +10,17 @@ use crate::memory;
 mod branch;
 mod misc;
 
-const NUM_INSTRUCTIONS: usize          = 256;  // Number of instructions
-/// Number of bytes to increment the PC by for an instruction.
-const PC_INCREMENT_NO_ARG: u16      = 1; // Instruction is only one byte long.
-const PC_INCREMENT_SHORT_ARG: u16   = 2; // Instruction takes an 8-bit parameter.
-const PC_INCREMENT_LONG_ARG: u16    = 3; // Instruction takes a  16-bit parameter. 
+/***** Instruction/Ops related constants *****/
+const NUM_INSTRUCTIONS:                         usize   = 256;              /// Number of instructions
+const INST_PARAM_OFFSET:                        u16     = 1;                /// Parameter for an offset is always instruction + 1.
 
-const INST_PARAM_OFFSET: u16        = 1; // Parameter for an offset is always instruction + 1.
+/*  Number of bytes to increment the PC by for an instruction. */
+const PC_INCREMENT_NO_ARG:                      u16     = 1;                /// Instruction is only one byte long.
+const PC_INCREMENT_SHORT_ARG:                   u16     = 2;                /// Instruction takes an 8-bit parameter.
+const PC_INCREMENT_LONG_ARG:                    u16     = 3;                /// Instruction takes a  16-bit parameter. 
 
 /// Map of the cpu opcodes. 
-/// Would prefer this to be a hashmap, but rust cannot generate a HashMap::From() as const,
-/// and a global cannot be declared using `let`.
+/// Would prefer this to be a hashmap, but rust cannot generate a HashMap::From() as const, and a global cannot be declared using `let`.
 const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
     CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x00 */
     CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x01 */
@@ -280,7 +280,19 @@ const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
     CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xFF */
 ];
 
-/* https://wiki.superfamicom.org/65816-reference */
+/***** Timing related constants *****/
+// The SNES master clock runs at about 21.477MHz NTSC (theoretically 1.89e9/88 Hz).
+// https://wiki.superfamicom.org/timing
+const CLOCK_CYCLE_TICK_NS:                      f64     = 46.5614378172;    /// Approximation of 1x 21.477MHz pulse in nanoseconds 
+const CYCLES_PER_SCANLINE:                      usize   = 1364;             /// Number of cycles between draw of scanline.
+const NON_INTERLACE_MODE_ALTERNATE_CYCLES_PER:  usize   = 1360;             /// Every other frame in non-interlaced, 4 less cycles per frame. This is "extra credit".
+const SCANLINES_PER_FRAME:                      usize   = 262;              /// Number of scanlines per 1 frame (e.g. 60Hz)
+const CYCLES_PER_FRAME:                         usize   = SCANLINES_PER_FRAME * CYCLES_PER_SCANLINE;    /// Number of cycles per 1 frame (e.g. 60Hz)
+
+/***** Implementation of enums and structures for CPU *****/
+
+/// Enumerated type to match to an opcode. Useful for debugging because it can be represented easily as a string.
+/// https://wiki.superfamicom.org/65816-reference
 #[derive(Debug, Clone, Copy)]
 pub enum CpuOpcode {
     STP,
@@ -288,7 +300,10 @@ pub enum CpuOpcode {
     // Many More
 }
 
-/// Defines width of operation. NO = Bare opcode (e.g. NOP). SHORT = 8bit param. LONG = 16bit param.
+/// Defines width of operation. 
+/// - NO    = Bare opcode (e.g. NOP). 
+/// - SHORT = 8bit param. 
+/// - LONG  = 16bit param.
 #[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 enum CpuParamWidth {
@@ -297,6 +312,10 @@ enum CpuParamWidth {
     LONG    = PC_INCREMENT_LONG_ARG
 }
 
+/// A conglomerate wrapper of the prior enums.
+///     - `opcode`      Opcode of next operation
+///     - `width`       Width of next operation, to calculate parameters.
+///     - `function`    Function pointer to handler for next operation.
 #[derive(Debug, Clone, Copy)]
 struct CpuInstruction {
     opcode: CpuOpcode,
@@ -305,6 +324,7 @@ struct CpuInstruction {
 }
 
 impl CpuInstruction {
+    /// Generates a NOP.
     pub fn new() -> Self {
         Self { opcode: CpuOpcode::NOP, width: CpuParamWidth::NO, function: misc::nop }
     }
@@ -313,14 +333,14 @@ impl CpuInstruction {
 /// Virtualized representation of the CPU internally.
 #[derive(Debug)]
 pub struct CpuState {
-    acc: u16,           /* Accumulator TODO: Union this         */
-    pc: u16,            /* Program Counter                      */
-    sp: u16,            /* Stack Pointer                        */
-    flags: u8,          /* Flags TODO: this should be a union of bits */
-    direct_page: u16,   /* Direct page addressing offset        */
-    data_bank: u8,      /* Reference to current data bank addr  */
-    prog_bank: u8,      /* Reference to current bank of instr   */
-    pub cycles_to_pend: u8  /* Number of cycles to pend before running next operation. */
+    acc: u16,               // Accumulator TODO: Union this
+    pc: u16,                // Program Counter
+    sp: u16,                // Stack Pointer
+    flags: u8,              // Flags TODO: this should be a union of bits
+    direct_page: u16,       // Direct page addressing offset  
+    data_bank: u8,          // Reference to current data bank addr
+    prog_bank: u8,          // Reference to current bank of instr
+    pub cycles_to_pend: u8  // Number of cycles to pend before running next operation. 
 }
 
 /* Associated Functions */
@@ -361,6 +381,14 @@ impl CpuState {
         INSTRUCTION_MAP[ p_mem.get_byte(address) as usize ]
     }
 
+    /// Execute an instruction.
+    /// # Parameters
+    ///     - `self`
+    ///     - `inst`    Instruction struct containing all relevant information about an operation.
+    ///     - `p_mem`   Mutable pointer to the memory for this instance.
+    /// # Returns
+    ///     - true      If continuing running
+    ///     - false     If a BRK or STP has been reached.
     fn execute(&mut self, inst: CpuInstruction, mut p_mem: &mut memory::Memory) -> bool {
         let continue_run: bool;
         let parameter_location: usize = memory::compose_address(self.prog_bank, self.pc + INST_PARAM_OFFSET);
@@ -381,3 +409,55 @@ impl CpuState {
         continue_run
     }
 }
+
+/***** File scope functions *****/
+
+/// Run the system.
+/// Also manages timings and delegates to other legs of the system. Might be worth breaking up in the future.
+/// # Parameters
+///     - `vm`  Object holding CPU state and Memory for this instance.
+pub fn run(mut vm: VirtualMachine) {
+    // TODO: Spin off thread for debugger
+    // TODO: Spin off thread for SPC700
+    // TODO: Spin off thread for PPU(?)
+
+    // Debugger loop which parses user inputs. 
+    let mut vm_running = true;
+
+    // Track number of cycles to do calculations on. Doesn't matter if this rolls over.
+    let mut cycles_elapsed: std::num::Wrapping<u64> = std::num::Wrapping(0);
+    loop {
+        // Check if the vm is running and step if so.
+        // This is not self-contained in a loop because the outside will contain debugger functions in the future.
+        // The SNES master clock runs at about 21.477MHz NTSC (theoretically 1.89e9/88 Hz).
+        // https://wiki.superfamicom.org/timing
+
+        if vm_running {
+            
+            // Draw a scanline.
+            if cycles_elapsed % std::num::Wrapping(CYCLES_PER_SCANLINE as u64) == std::num::Wrapping(0) {
+                // TODO: PPU something
+            }
+
+            // If there is no need to pend on another cycle, then go ahead and run an operation.
+            if vm.cpu.cycles_to_pend == 0 {
+                vm_running = vm.cpu.step(&mut vm.memory);
+                println!("Next instruction stalled by {} cycles", vm.cpu.cycles_to_pend);
+            }
+            // Otherwise, punt on operating for however long we need to.
+            else if vm.cpu.cycles_to_pend > 0 {
+                // We have to round because rust does not implement fractional nanoseconds (how unbelievable!!)
+                std::thread::sleep( time::Duration::from_nanos(CLOCK_CYCLE_TICK_NS as u64) );
+                cycles_elapsed += 1;
+                vm.cpu.cycles_to_pend -= 1;
+            }
+        }
+
+
+
+
+
+    }
+}
+
+/***** Tests *****/

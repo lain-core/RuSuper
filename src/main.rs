@@ -43,37 +43,9 @@ pub fn main() {
         }
     
         // Start Running.
-        run(vm);
+        cpu::run(vm);
     }
     else {
         println!("You must specify a *.sfc file to run!");
-    }
-
-}
-
-/// Run the core.
-/// 
-/// # Parameters
-///     - `vm`: Virtual Machine in ownership of all states.
-fn run(mut vm: VirtualMachine) {
-    // TODO: Spin off thread for debugger
-    // TODO: Spin off thread for SPC700
-    // TODO: Spin off thread for PPU(?)
-
-    // Debugger loop which parses user inputs. 
-    let mut vm_running = true;
-    loop {
-        // Check if the vm is running and step if so.
-        // This is not self-contained in a loop because the outside will contain debugger functions in the future.
-        if vm_running && (vm.cpu.cycles_to_pend == 0) {
-            vm_running = vm.cpu.step(&mut vm.memory);
-            println!("Next instruction stalled by {} cycles", vm.cpu.cycles_to_pend);
-        }
-        else if vm.cpu.cycles_to_pend > 0 {
-            vm.cpu.cycles_to_pend -= 1;
-        }
-        else{
-            break;
-        }
     }
 }

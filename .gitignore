@@ -2,6 +2,5 @@
 **/data/*
 *.sfc
 *.smc
+*.tags
 .vscode/*
-rusuper-lib/target/*
-rusuper-bin/target/*
