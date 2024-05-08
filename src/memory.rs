@@ -1,11 +1,12 @@
-use std::{fs, io::Read};
+use core::fmt;
+use std::{fs, io::Read, ops::Add};
 /* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
 
-const MEMORY_SIZE: usize            = 0xFFFFFF;
-pub const MEMORY_END:  usize            = 0x7FFFFF; /// Memory commonly ends at bank $7F https://ersanio.gitbook.io/assembly-for-the-snes/the-fundamentals/memory
-pub const MEMORY_BANK_COUNT: usize      =     0xFF; /// Number of addressable memory banks.
-pub const MEMORY_BANK_SIZE: usize       =   0xFFFF; /// Size of one memory bank.
-pub const MEMORY_BANK_INDEX: u8         = 16;       /// Bit index to shift a u8 by to obtain a bank address.
+const MEMORY_SIZE: usize                = (0xFFFFFF) + 1;   // Total memory is addressable from 0x000000 - 0xFFFFFF
+pub const MEMORY_END:  usize            = 0x7FFFFF;         // Memory commonly ends at bank $7F https://ersanio.gitbook.io/assembly-for-the-snes/the-fundamentals/memory
+pub const MEMORY_BANK_COUNT: usize      =     0xFF;         // Number of addressable memory banks.
+pub const MEMORY_BANK_SIZE: usize       =   0xFFFF;         // Size of one memory bank.
+pub const MEMORY_BANK_INDEX: u8         = 16;               // Bit index to shift a u8 by to obtain a bank address.
 
 /// Individual
 /// TODO: Do I need to make a better structure for this?
@@ -19,7 +20,7 @@ pub struct Memory {
 impl Memory {
     /// Creates a new instance of a Memory object, with all addresses initialized to 0.
     pub fn new() -> Self {
-        let mut new_memory = Memory {
+        let new_memory = Memory {
             memory: Vec::with_capacity(MEMORY_SIZE)
         };
 
@@ -70,17 +71,90 @@ impl Memory {
     ///     - `self`: Pointer to memory object which contains memory to read from.
     ///     - `address`: Address of byte to fetch.
     /// # Returns:
-    ///     - Byte value at that address.
-    pub fn get_byte(&self, address: usize) -> u8 {
-        self.memory[address]
+    ///     - `Ok(value)`   If the argument was valid
+    ///     - `Err(e)`      If the arument was invalid
+    pub fn get_byte(&self, address: usize) -> Result<u8, AddressOutOfBoundsError> {
+        match address_is_valid(address) {
+            Ok(_T) => {
+                Ok(self.memory[address])
+            }
+            Err(E) => {
+                Err(E)
+            }
+        }
     }
 
     /// Return a constructed word from memory.
     /// # Parameters:
     ///     - `self`: Pointer to memory object which contains memory to read from.
     ///     - `address`: Address of byte to fetch.
-    pub fn get_word(&self, address: usize) -> u16 {
-        self.memory[address] as u16 | (self.memory[address + 1] as u16) << 8
+    /// # Returns:
+    ///     - `Ok(value)`   If the argument was valid
+    ///     - `Err(e)`      If the arument was invalid
+    pub fn get_word(&self, address: usize) -> Result<u16, AddressOutOfBoundsError> {
+        match address_is_valid(address) {
+            Ok(_T) => {
+                Ok(self.memory[address] as u16 | (self.memory[address + 1] as u16) << 8)
+            }
+            Err(E) => {
+                Err(E)
+            }
+        }
+        
+    }
+
+    /// Put a byte into memory.
+    /// # Parameters:
+    ///     - `self`:       Pointer to mutable memory object to write word into.
+    ///     - `address`:    Location in memory to write to.
+    ///     - `word`:       Word to write.
+    pub fn put_byte(&mut self, address: usize, byte: u8) -> Result<(), AddressOutOfBoundsError> {
+        match address_is_valid(address) {
+            Ok(_T) => {
+                self.memory[address] = byte;
+                Ok(())
+            }
+            Err(E) => {
+                Err(E)
+            }
+        }
+    }
+
+    /// Put a word into memory.
+    /// # Parameters:
+    ///     - `self`:       Pointer to mutable memory object to write word into.
+    ///     - `address`:    Location in memory to write to.
+    ///     - `word`:       Word to write.
+    pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), AddressOutOfBoundsError> {
+        match address_is_valid(address) {
+            Ok(_T) => {
+                self.memory[address]        = ((word & 0xFF00) >> 8) as u8;
+                self.memory[address + 1]    = (word & 0x00FF) as u8;
+                Ok(())
+            }
+            Err(E) => {
+                Err(E)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AddressOutOfBoundsError {
+    addr: usize
+}
+
+impl AddressOutOfBoundsError {
+    pub fn new(addr: usize) -> Self {
+        Self {
+            addr: addr
+        }
+    }
+}
+
+impl fmt::Display for AddressOutOfBoundsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Address index {:#08x} out of bounds", self.addr)
     }
 }
 
@@ -92,4 +166,19 @@ impl Memory {
 ///     - Composed full address of a byte in memory.
 pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
     ((bank as usize) << MEMORY_BANK_INDEX) | byte_addr as usize
+}
+
+/// Checks if an address is within range.
+/// # Parameters:
+///     - `address`     An address to test.
+/// # Returns:
+///     - `Ok(true)` for a valid address
+///     - `AddressOutOfBoundsError(address)` for an invalid address
+pub fn address_is_valid(address: usize) -> Result<(), AddressOutOfBoundsError> {
+    if address <= MEMORY_SIZE {
+        Ok(())
+    }
+    else {
+        Err(AddressOutOfBoundsError::new(address))
+    }
 }

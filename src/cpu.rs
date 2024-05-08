@@ -375,10 +375,9 @@ impl CpuState {
     /// # Parameters
     ///     - `self`
     ///     - `memory`: Pointer to memory object to read data from.
-    /// ## TODO: Who's responsibility is it to discern the next instruction's width?
     fn fetch_and_decode(&self, p_mem: &memory::Memory) -> CpuInstruction {
         let address = memory::compose_address(self.prog_bank, self.pc);
-        INSTRUCTION_MAP[ p_mem.get_byte(address) as usize ]
+        INSTRUCTION_MAP[ p_mem.get_byte(address).unwrap() as usize ]
     }
 
     /// Execute an instruction.
@@ -397,8 +396,8 @@ impl CpuState {
         
         match inst.width {
             CpuParamWidth::NO       => { parameter_value = 0 },
-            CpuParamWidth::SHORT    => { parameter_value = p_mem.get_byte(parameter_location) as u16 },
-            CpuParamWidth::LONG     => { parameter_value = p_mem.get_word(parameter_location) }
+            CpuParamWidth::SHORT    => { parameter_value = p_mem.get_byte(parameter_location).unwrap() as u16 },
+            CpuParamWidth::LONG     => { parameter_value = p_mem.get_word(parameter_location).unwrap() }
         }
 
         // Call the function to execute.
@@ -425,7 +424,7 @@ pub fn run(mut vm: VirtualMachine) {
     let mut vm_running = true;
 
     // Track number of cycles to do calculations on. Doesn't matter if this rolls over.
-    let mut cycles_elapsed: std::num::Wrapping<u64> = std::num::Wrapping(0);
+    let mut cycles_elapsed: std::num::Wrapping<usize> = std::num::Wrapping(0);
     loop {
         // Check if the vm is running and step if so.
         // This is not self-contained in a loop because the outside will contain debugger functions in the future.
@@ -435,7 +434,7 @@ pub fn run(mut vm: VirtualMachine) {
         if vm_running {
             
             // Draw a scanline.
-            if cycles_elapsed % std::num::Wrapping(CYCLES_PER_SCANLINE as u64) == std::num::Wrapping(0) {
+            if cycles_elapsed % std::num::Wrapping(CYCLES_PER_SCANLINE as usize) == std::num::Wrapping(0) {
                 // TODO: PPU something
             }
 
@@ -461,3 +460,8 @@ pub fn run(mut vm: VirtualMachine) {
 }
 
 /***** Tests *****/
+#[cfg(test)]
+mod tests {
+    use self::memory::Memory;
+    use super::*;
+}
