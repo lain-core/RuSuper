@@ -1,6 +1,5 @@
 use core::fmt;
 use std::{fs, io::Read};
-use crate::rominfo;
 /* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
 
 const MEMORY_SIZE: usize                = (0xFFFFFF) + 1;   // Total memory is addressable from 0x000000 - 0xFFFFFF
@@ -13,22 +12,18 @@ pub const MEMORY_BANK_INDEX: u8         = 16;               // Bit index to shif
 /// TODO: Do I need to make a better structure for this?
 const LOW_RAM_MIRROR: usize         =   0x0000;
 const HW_REGISTERS: usize           =   0x2000;
-pub const ROM_START_ADDR: usize         =   0x008000;
-pub const ROM_END_ADDR: usize           =   0x7DFFFF;
 
 /// Structure to represent memory.
-/// Really just a wrapper for a vector; we are doing this to avoid implementing file-scope global state.
+/// Really just a wrapper for an array; we are doing this to avoid implementing file-scope global state.
 pub struct Memory {
-    memory: Vec<u8>,
-    header: rominfo::HeaderData
+    memory: Box<[u8; MEMORY_SIZE]>,
 }
 
 impl Memory {
     /// Creates a new instance of a Memory object, with all addresses initialized to 0.
     pub fn new() -> Self {
         let new_memory = Memory {
-            memory: Vec::with_capacity(MEMORY_SIZE),
-            header: rominfo::HeaderData::new();
+            memory: Box::new([0; MEMORY_SIZE])
         };
 
         new_memory
@@ -62,20 +57,6 @@ impl Memory {
                 print!("{:#04X}, ", byte_value);
             }
         }
-    }
-
-    /// Load a ROM image into memory.
-    /// # Parameters:
-    ///     - `self`:    Pointer to memory object which contains memory to write file to.
-    ///     - `file`:    file to read the data from
-    pub fn load_rom(&mut self, mut file: fs::File) {
-        let mut buf: Vec<u8>;
-        // TODO: This needs to adjust itself dependent on the size of rom as determined from the headers.
-        // TODO: What to do with headers? Break it out as it's own thing or deal with it here?
-        // https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map
-        // https://snes.nesdev.org/wiki/Memory_map
-        let read_result = file.read(&mut self.memory[ROM_START_ADDR .. ROM_END_ADDR]).unwrap();
-        println!("Read {} bytes", read_result);
     }
 
     /// Return one byte from memory.
@@ -168,6 +149,16 @@ impl AddressOutOfBoundsError {
 impl fmt::Display for AddressOutOfBoundsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Address index {:#08x} out of bounds", self.addr)
+    }
+}
+
+pub trait IntoWord {
+    fn to_word(self) -> u16;
+}
+
+impl IntoWord for &[u8; 2] {
+    fn to_word(self) -> u16 {
+        (self[0] as u16) >> 8 | (self[1] as u16) << 8
     }
 }
 

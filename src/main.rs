@@ -4,7 +4,7 @@ use std::path::Path;
 
 mod cpu;
 mod memory;
-mod rominfo;
+mod romdata;
 
 /// VM Struct which contains the individual pieces of the system.
 pub struct VirtualMachine {
@@ -33,23 +33,12 @@ pub fn main() {
             "File not found"
         );
 
-        if path.extension().unwrap() == "smc" {
-            println!("SMC files contain extra data which is not handled correctly by this tool yet.\nPlease use an SFC file.")
-        }
-        else{
             // Initialize the VM and then load the ROM into memory.
             let mut vm = VirtualMachine::new();
-            if let Ok(file) = fs::File::open(&path){
-                println!("Reading file {}", &path.display());
-                vm.memory.load_rom(file);
-            }
-            else {
-                println!("Failed to read file {}", path.display());
-            }
-        
+            romdata::load_rom(path, &mut vm.memory);
+
             // Start Running.
             cpu::run(vm);
-        }
     }
     else {
         println!("You must specify a *.sfc file to run!");
