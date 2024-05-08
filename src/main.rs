@@ -4,6 +4,7 @@ use std::path::Path;
 
 mod cpu;
 mod memory;
+mod rominfo;
 
 /// VM Struct which contains the individual pieces of the system.
 pub struct VirtualMachine {

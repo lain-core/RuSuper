@@ -1,5 +1,6 @@
 use core::fmt;
 use std::{fs, io::Read};
+use crate::rominfo;
 /* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
 
 const MEMORY_SIZE: usize                = (0xFFFFFF) + 1;   // Total memory is addressable from 0x000000 - 0xFFFFFF
@@ -15,20 +16,11 @@ const HW_REGISTERS: usize           =   0x2000;
 pub const ROM_START_ADDR: usize         =   0x008000;
 pub const ROM_END_ADDR: usize           =   0x7DFFFF;
 
-enum MemoryMode {
-    LOROM,
-    HIROM,
-    EXHIROM,
-}
-
-
-// TODO: probably make a rom header struct
-
 /// Structure to represent memory.
 /// Really just a wrapper for a vector; we are doing this to avoid implementing file-scope global state.
 pub struct Memory {
     memory: Vec<u8>,
-    mode:   MemoryMode
+    header: rominfo::HeaderData
 }
 
 impl Memory {
@@ -36,7 +28,7 @@ impl Memory {
     pub fn new() -> Self {
         let new_memory = Memory {
             memory: Vec::with_capacity(MEMORY_SIZE),
-            mode: MemoryMode::LOROM
+            header: rominfo::HeaderData::new();
         };
 
         new_memory
