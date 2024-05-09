@@ -92,6 +92,13 @@ const HI_ROM_EXC_VECTOR_ADDR:           usize = LO_ROM_BANK_SIZE_BYTES - EV_LEN_
 const HI_ROM_HEADER_ADDR:               usize = HI_ROM_EXC_VECTOR_ADDR - HDR_LEN_BYTES;
 const HI_ROM_EXT_HEADER_ADDR:           usize = HI_ROM_HEADER_ADDR - OPT_HEADER_LEN_BYTES;
 
+/// Map mode values
+const MAP_HIROM_MASK:                   u8 = 0b00000001;
+const MAP_SA1_MASK:                     u8 = 0b00000010;
+const MAP_EXHIROM_MASK:                 u8 = 0b00000100;
+// Unused Bit                                0b00001000 
+const MAP_FASTROM_MASK:                 u8 = 0b00010000;
+const MAP_BASE_MASK:                    u8 = 0b00100000;
 /// Public constants
 pub const ROM_BASE_ADDR:                u16 = 0x8000;    // All LoRom banks, and mirrored banks of both Lo and HiRom fall under $XX8000. E.G.: Bank 0: $808000, Bank 1: $908000
 
@@ -120,9 +127,86 @@ pub enum RomExpansions {
     SDD1
 }
 
+/// Cart type doesn't really map linearly, which is kind of a headache.
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum CartType {
+    ROMOnly             = 0x00,
+    ROMSram             = 0x01,
+    ROMSramBattery      = 0x02,
+    ROMCoCpu            = 0x03,
+    ROMCoCpuSram        = 0x04,
+    ROMCoCpuSramBattery = 0x05,
+    ROMCoCpuBattery     = 0x06,
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum RomCoProcessor {
+    DSP                 = 0x00,
+    SuperFX             = 0x01,
+    OBC1                = 0x02,
+    S_DD1               = 0x03,
+    S_RTC               = 0x04,
+    Other               = 0x05,
+    Custom              = 0xFF
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum CustomCoProcessor {
+    SPC7110             = 0x00,
+    ST010_ST011         = 0x01,
+    ST018               = 0x02,
+    CX4                 = 0x03,
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum RomRegion {
+    Japan               = 0x00,
+    USA                 = 0x01,
+    Europe              = 0x02,
+    Sweden              = 0x03,
+    Japan2              = 0x04,
+    Denmark             = 0x05,
+    France              = 0x06,
+    Netherlands         = 0x07,
+    Spain               = 0x08,
+    Germany             = 0x09,
+    Italy               = 0x0A,
+    China               = 0x0B,
+    Indonesia           = 0x0C,
+    SouthKorea          = 0x0D,
+    International       = 0x0E,
+    Canada              = 0x0F,
+    Brazil              = 0x10,
+    Australia           = 0x11,
+}
+
 type Header = [u8; HDR_LEN_BYTES];
 type OptionalHeader = [u8; OPT_HEADER_LEN_BYTES];
 type ExceptionVectorTable = [u8; EV_LEN_BYTES];
+
+pub struct RomModeMapping {
+    mem_map: RomSize,
+    speed: RomClkSpeed,
+    cart_type: CartType,
+    region:  RomRegion,
+    expansion_present: bool
+}
+
+impl RomModeMapping {
+    fn new() -> Self {
+        Self {
+            mem_map: RomSize::LoRom,
+            speed: RomClkSpeed::SlowRom,
+            cart_type: CartType::ROMOnly,
+            region: RomRegion::Japan,
+            expansion_present: false
+        }
+    }
+}
 
 /// https://snes.nesdev.org/wiki/ROM_header#Header_Verification
 /// https://sneslab.net/wiki/SNES_ROM_Header
@@ -187,7 +271,7 @@ pub fn load_rom(path: PathBuf, mut memory: &memory::Memory) -> Result<(), RomRea
 ///     - `Ok(Vec<u8>)`:        Vector containing all ROM data if successful.
 ///     - `Err(RomReadError)`:  Error with context 
 fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
-    let mut retval: Result<Vec<u8>, RomReadError>;
+    let retval: Result<Vec<u8>, RomReadError>;
     
     // Check and just immediatelyVirtualMachine flop if an SMC is passed until we manage that.
     if path.extension().unwrap() == "smc" {
@@ -195,12 +279,15 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
     }
 
     // Attempt to open the file, and load it into a buffer.
-    if let mut file = fs::File::open(&path).unwrap(){
-        let mut buf: Vec<u8>;
-        let read_result = file.read_to_end(&mut buf).unwrap_err(){
-            retval = Err(RomReadError{ context: format!("{}", read_result) });
-        }
-        retval = Ok(buf);
+    let file = fs::File::open(&path);
+    
+    if file.is_ok()
+    {
+        let mut buf: Vec<u8> = vec![];
+        let _read_result = match file.unwrap().read_to_end(&mut buf) {
+            Ok(_) => { retval = Ok(buf); },
+            Err(e) => {retval = Err(RomReadError{ context: format!("Failed to read file: {}", e)});},
+        };
     }
     else{
         retval = Err(RomReadError{ context: format!("Failed to open file at {}", &path.display()) });
@@ -219,32 +306,43 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
 ///     - `HeaderData` struct with copies of the Header, Exception Vector, and Optional Header (if present) values.
 ///     - `RomReadError` if the 
 fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
+    let retval: Result<RomData, RomReadError>;
     // Sum all bytes in the file. overflow is fine.
-    let checksum: Wrapping<u16>;
+    let checksum: Wrapping<u16> = Wrapping(0);
     rom.iter().map(|x| checksum + Wrapping(*x as u16));
 
-    let header: [u8; HDR_LEN_BYTES];
-    let mapping: Result<RomSize, RomReadError>;
+    let mut header: Header = [0; HDR_LEN_BYTES];
+    let mapping: Result<RomModeMapping, RomReadError>;
     
     // Check the bounds, then excise where a header would be and test for the mapping.
     if rom.capacity() > HI_ROM_BANK_SIZE_BYTES
     {
         header.clone_from_slice(&rom[HI_ROM_HEADER_ADDR .. (HI_ROM_HEADER_ADDR + HDR_LEN_BYTES)]);
-        mapping = test_mapping(checksum.0, &header);
+        match test_checksum(checksum.0, &header){
+            Ok(_t) => { mapping = gather_mapping(&header); },
+            Err(e) => { retval = Err(e); }
+        };
     }
     else if rom.capacity() > LO_ROM_BANK_SIZE_BYTES
     {
         header.clone_from_slice(&rom[LO_ROM_HEADER_ADDR .. (LO_ROM_HEADER_ADDR + HDR_LEN_BYTES)]);
-        mapping = test_mapping(checksum.0, &header);
+        match test_checksum(checksum.0, &header){
+            Ok(_t) => { mapping = gather_mapping(&header); },
+            Err(e) => { retval = Err(e); }
+        };
     }
     else {
         retval = Err(RomReadError{ context: "File was too small to contain header".to_string() });
     }
 
-    retval
+    Err(RomReadError{context: "Function implementation is not complete".to_string() })
 }
 
-fn test_mapping(checksum: u16, header: &[u8; HDR_LEN_BYTES]) -> Result<RomSize, RomReadError> {
+fn gather_mapping(header: &Header) -> Result<RomModeMapping, RomReadError> {
+    Ok(RomModeMapping::new())
+}
+
+fn test_checksum(checksum: u16, header: &Header) -> Result<(), RomReadError> {
     let test_checksum: [u8; 2] = header[HDR_CHECKSUM_INDEX .. HDR_CHECKSUM_INDEX + 1].try_into().unwrap();
     let test_compare: [u8; 2] = header[HDR_COMPLEMENT_CHECK_INDEX .. HDR_COMPLEMENT_CHECK_INDEX + 1].try_into().unwrap();
 
@@ -252,8 +350,10 @@ fn test_mapping(checksum: u16, header: &[u8; HDR_LEN_BYTES]) -> Result<RomSize, 
     if checksum == test_checksum.to_word() && 
         ((Wrapping(checksum) + Wrapping(test_compare.to_word())).0 == HDR_TEST_VALUE) {
         // This rom looks good. Actually fetch the values for this.
+        println!("Checksum was good!");
     }
 
+    Ok(())
 }
 
 /********************************* ROM Info Tests ******************************************************/
