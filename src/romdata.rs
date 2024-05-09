@@ -320,7 +320,7 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
 ///     - `RomReadError` if the 
 fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
     let mut retval: Result<RomData, RomReadError> = Err(RomReadError::new("".to_string()));
-    let header: Header = [0; HDR_LEN_BYTES];
+    let mut header: Header = [0; HDR_LEN_BYTES];
 
     // Sum all bytes in the file. overflow is fine.
     let mut checksum: Wrapping<u16> = Wrapping(0);
@@ -354,12 +354,8 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 
     // If we got a valid checksum, use the returned size to populate a new RomData object.
     if checksum_valid.is_ok() {
-        let opt_header_is_present = &header[HDR_FIXED_VAL_INDEX] == ;
+        let opt_header_is_present = header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT;
 
-        retval = Ok(RomData {
-            header: header,
-            opt_header: 
-        });
     }
 
     return retval;

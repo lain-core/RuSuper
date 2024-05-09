@@ -13,20 +13,21 @@ pub const MEMORY_BANK_INDEX: u8         = 16;               // Bit index to shif
 const LOW_RAM_MIRROR: usize         =   0x0000;
 const HW_REGISTERS: usize           =   0x2000;
 
+type MemoryData = Box<[u8; MEMORY_SIZE]>;
+
 /// Structure to represent memory.
 /// Really just a wrapper for an array; we are doing this to avoid implementing file-scope global state.
 pub struct Memory {
-    memory: Box<[u8; MEMORY_SIZE]>,
+    memory: MemoryData
 }
 
 impl Memory {
     /// Creates a new instance of a Memory object, with all addresses initialized to 0.
     pub fn new() -> Self {
-        let new_memory = Memory {
-            memory: Box::new([0; MEMORY_SIZE])
-        };
-
-        new_memory
+        Memory {
+            // https://github.com/rust-lang/rust/issues/53827
+            memory: vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap()
+        }
     }
 
     /// Visually dump a bank to stdout.
@@ -193,10 +194,62 @@ pub fn address_is_valid(address: usize) -> Result<(), AddressOutOfBoundsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::random;
+    use rand::Rng;
+
+    /// Given a memory ptr fill it with random test data, and return the random test data it was filled from.
+    /// # Parameters:
+    ///     - `memory_under_test`:      Memory to fill.
+    /// # Returns:
+    ///     - `random_data`:            Randomly generated list of u8s.
+    fn fill_random(memory_under_test: &mut Memory) -> MemoryData {
+        let mut random_data: MemoryData = vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
+
+        for addr in 0 .. MEMORY_END {
+            let rand_byte: u8 = rand::thread_rng().gen();
+            random_data[addr] = rand_byte;
+            memory_under_test.memory[addr] = rand_byte;
+        }
+
+        random_data
+    }
 
     #[test]
-    fn test_load_rom() {
-        
+    fn test_put_byte() {
+        let mut memory_under_test = Memory::new();
+        let mut random_data: Box<[u8; MEMORY_SIZE]> = vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
+
+        for addr in 0 .. MEMORY_END {
+            let rand_byte: u8 = rand::thread_rng().gen();
+            random_data[addr] = rand_byte;
+            memory_under_test.put_byte(addr, rand_byte).unwrap();
+        }
+
+        for addr in 0 .. MEMORY_END {
+            assert_eq!(random_data[addr], memory_under_test.memory[addr]);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_put_invalid_byte() {
+        let mut memory_under_test = Memory::new();
+        memory_under_test.put_byte(MEMORY_SIZE, 0).unwrap();
+    }
+
+    #[test]
+    fn test_get_byte() {
+        let mut memory_under_test = Memory::new();
+        let random_data: MemoryData = fill_random(&mut memory_under_test);
+ 
+        for addr in 0 .. MEMORY_END {
+            assert_eq!(random_data[addr], memory_under_test.get_byte(addr).unwrap());
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_get_invalid_byte() {
+        let memory_under_test = Memory::new();
+        let _ = &memory_under_test.get_byte(MEMORY_SIZE).unwrap();
     }
 }
