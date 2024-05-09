@@ -158,7 +158,7 @@ pub trait IntoWord {
 
 impl IntoWord for &[u8; 2] {
     fn to_word(self) -> u16 {
-        (self[0] as u16) >> 8 | (self[1] as u16) << 8
+        ((self[0] as u16) >> 8 | (self[1] as u16) << 8) as u16
     }
 }
 

@@ -1,6 +1,5 @@
-use std::time;
-
-use crate::{memory::{self, ROM_START_ADDR}, VirtualMachine};
+use std::{path::PathBuf, time};
+use crate::{memory, romdata};
 
 // Instructions mod declarations
 
@@ -291,6 +290,23 @@ const CYCLES_PER_FRAME:                         usize   = SCANLINES_PER_FRAME * 
 
 /***** Implementation of enums and structures for CPU *****/
 
+/// VM Struct which contains the individual pieces of the system.
+struct VirtualMachine {
+    cpu: CpuState,
+    memory: memory::Memory,
+    romdata: romdata::RomData
+}
+
+impl VirtualMachine {
+    pub fn new() -> Self {
+        Self {
+            cpu: CpuState::new(),
+            memory: memory::Memory::new(),
+            romdata: romdata::RomData::new()
+        }
+    }
+}
+
 /// Enumerated type to match to an opcode. Useful for debugging because it can be represented easily as a string.
 /// https://wiki.superfamicom.org/65816-reference
 #[derive(Debug, Clone, Copy)]
@@ -349,7 +365,7 @@ impl CpuState {
     pub const fn new() -> Self {
         Self {
             acc: 0x0000,
-            pc: ROM_START_ADDR as u16,
+            pc: 0x0000,
             sp: 0x0000,
             flags: 0x00,
             direct_page: 0x0000,
@@ -415,10 +431,14 @@ impl CpuState {
 /// Also manages timings and delegates to other legs of the system. Might be worth breaking up in the future.
 /// # Parameters
 ///     - `vm`  Object holding CPU state and Memory for this instance.
-pub fn run(mut vm: VirtualMachine) {
+pub fn run(mut path: std::path::PathBuf) {
     // TODO: Spin off thread for debugger
     // TODO: Spin off thread for SPC700
     // TODO: Spin off thread for PPU(?)
+
+    // Initialize the VM and then load the ROM into memory.
+    let mut vm = VirtualMachine::new();
+    romdata::load_rom(path, &mut vm.memory);
 
     // Debugger loop which parses user inputs. 
     let mut vm_running = true;
@@ -429,6 +449,7 @@ pub fn run(mut vm: VirtualMachine) {
         // Check if the vm is running and step if so.
         // This is not self-contained in a loop because the outside will contain debugger functions in the future.
         // The SNES master clock runs at about 21.477MHz NTSC (theoretically 1.89e9/88 Hz).
+        // The SNES CPU runs at either 2.68MHz or 3.58MHz based on what a rom requests.
         // https://wiki.superfamicom.org/timing
 
         if vm_running {
