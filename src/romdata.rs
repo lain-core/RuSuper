@@ -100,6 +100,11 @@ const HI_ROM_EXC_VECTOR_ADDR:           usize = LO_ROM_BANK_SIZE_BYTES - EV_LEN_
 const HI_ROM_HEADER_ADDR:               usize = HI_ROM_EXC_VECTOR_ADDR - HDR_LEN_BYTES;
 const HI_ROM_EXT_HEADER_ADDR:           usize = HI_ROM_HEADER_ADDR - OPT_HEADER_LEN_BYTES;
 
+/// ExHiRom specific values
+const EX_HI_ROM_EXC_VECTOR_ADDR:        usize = (4 * 1024 * 1024) + (HI_ROM_BANK_SIZE_BYTES - EV_LEN_BYTES); // Header starts at the end of the first bank after 4MiB.
+const EX_HI_ROM_HEADER_ADDR:            usize = EX_HI_ROM_EXC_VECTOR_ADDR - HDR_LEN_BYTES;
+const EX_HI_ROM_EXT_HEADER_ADDR:        usize = EX_HI_ROM_HEADER_ADDR - OPT_HEADER_LEN_BYTES;
+
 /// Map mode values
 const MAP_HIROM_MASK:                   u8 = 0b00000001;
 const MAP_SA1_MASK:                     u8 = 0b00000010;
@@ -325,7 +330,7 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
 ///     - `RomReadError` if the 
 fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
     let mut retval: Result<RomData, RomReadError> = Err(RomReadError::new("".to_string()));
-    let mut header: Header = [0; HDR_LEN_BYTES];
+    let mut data = RomData::new();
 
     // Sum all bytes in the file. overflow is fine.
     let mut checksum: Wrapping<u16> = Wrapping(0);
@@ -334,24 +339,31 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
     let mut checksum_valid: Result<RomSize, RomReadError>;
 
     // Check the bounds, then excise where a header would be and test for the mapping.
+    // TODO: There is a much prettier way to manage this I'm sure.
+
+    // A ROM can only be an ExHiRom if it is > 4MiB + 1 bank in size.
+    if rom.capacity() > EX_HI_ROM_EXC_VECTOR_ADDR {
+        data.header.clone_from_slice(&rom[EX_HI_ROM_EXT_HEADER_ADDR .. (EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES)]);
+        checksum_valid = test_checksum(checksum.0, &data.header);
+    }
     // If the ROM is > HI_ROM_BANK_SIZE_BYTES in length, it could be a hirom or a lorom.
-    if rom.capacity() >= HI_ROM_BANK_SIZE_BYTES {
-        // Test if this is a LoRom.
-        header.clone_from_slice(&rom[LO_ROM_HEADER_ADDR .. (LO_ROM_HEADER_ADDR + HDR_LEN_BYTES)]);
-        checksum_valid = test_checksum(checksum.0, &header);
+    else if rom.capacity() >= HI_ROM_BANK_SIZE_BYTES {
+        // Test if this is a HiRom.
+        data.header.clone_from_slice(&rom[HI_ROM_EXT_HEADER_ADDR .. (HI_ROM_BANK_SIZE_BYTES - 1)]);
+        checksum_valid = test_checksum(checksum.0, &data.header);
 
         if checksum_valid.is_err() {
-            // Test if this is a HiRom.
-            header.clone_from_slice(&rom[HI_ROM_HEADER_ADDR .. (HI_ROM_HEADER_ADDR + HDR_LEN_BYTES)]);
-            checksum_valid = test_checksum(checksum.0, &header);
-        };
+            // Test if this is a LoRom.
+            data.header.clone_from_slice(&rom[LO_ROM_EXT_HEADER_ADDR .. (LO_ROM_BANK_SIZE_BYTES - 1)]);
+            checksum_valid = test_checksum(checksum.0, &data.header);
+        }
     }
     // Otherwise it could only possibly be a LoRom.
     else if rom.capacity() >= LO_ROM_BANK_SIZE_BYTES
     {
         // Test if this is a LoRom.
-        header.clone_from_slice(&rom[LO_ROM_HEADER_ADDR .. (LO_ROM_HEADER_ADDR + HDR_LEN_BYTES)]);
-        checksum_valid = test_checksum(checksum.0, &header);
+        data.header.clone_from_slice(&rom[LO_ROM_EXT_HEADER_ADDR .. (LO_ROM_BANK_SIZE_BYTES)]);
+        checksum_valid = test_checksum(checksum.0, &data.header);
     }
     else {
         checksum_valid = Err(RomReadError{ context: "File was too small to contain header".to_string() });
@@ -359,16 +371,15 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 
     // If we got a valid checksum, use the returned size to populate a new RomData object.
     if checksum_valid.is_ok() {
-        let opt_header_is_present = header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT;
+        if data.header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT {
+            data.opt_is_present = true;
+            // data.opt_header = fetch_opt_header(&rom, &checksum_valid.unwrap());
+        }
 
+        // data.exception_vectors = fetch_exception_vectors(&rom, &checksum_valid.unwrap());        
     }
 
     return retval;
-}
-
-
-fn gather_mapping(header: &Header) -> Result<RomModeMapping, RomReadError> {
-    Ok(RomModeMapping::new())
 }
 
 /// Test if the checksum for this file is valid, and if so, check the map byte and return the result.
@@ -379,8 +390,14 @@ fn gather_mapping(header: &Header) -> Result<RomModeMapping, RomReadError> {
 ///     - `RomSize`:        If the ROM checksum was valid,
 ///     - `RomReadError`:   If the ROM checksum was invalid, with both the calculated and internal values printed.
 fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError> {
-    let test_checksum: u16 = memory::u16_from_bytes(header, HDR_CHECKSUM_INDEX, HDR_CHECKSUM_INDEX + 1);
-    let test_compare:  u16 = memory::u16_from_bytes(header, HDR_COMPLEMENT_CHECK_INDEX, HDR_COMPLEMENT_CHECK_INDEX + 1);
+    let test_checksum: u16 = memory::u16_from_bytes(
+        header[HDR_CHECKSUM_INDEX],
+        header[HDR_CHECKSUM_INDEX+1]
+    );
+    let test_compare:  u16 = memory::u16_from_bytes(
+        header[HDR_COMPLEMENT_CHECK_INDEX], 
+        header[HDR_COMPLEMENT_CHECK_INDEX + 1]
+    );
 
     
     let mut retval: Result<RomSize, RomReadError> = Err(RomReadError::new(
@@ -420,16 +437,28 @@ mod tests {
     const EXHIROM_VALUE: u8 = 0x25;
     const INVALID_MAP_VALUE: u8 = 0xC0;
 
-    #[test]
-    fn test_test_checksum() {
-
-        // Fill up a random array.
+    /// Provided a target size, construct a header with a valid checksum for that value, and return the outcome.
+    /// # Parameters:
+    ///     - `expected_result`: Type of ROM to test.
+    /// # Returns:
+    ///     - `Ok(RomSize)`:     Matching ROM size to expected_result if test is OK,
+    ///     - `Err(RomReadErr)`: If `test_checksum()` is broken.
+    fn test_checksum_result(expected_result: RomSize) -> Result<RomSize, RomReadError> {
+        // Generate a randomized header.
         let mut test_header: Header = rand::thread_rng().gen();
         let mut checksum: u16 = 0;
 
-        // Test LoRom Detection.
-        println!("Checking LoRom...");
-        test_header[HDR_MAP_MODE_INDEX] = LOROM_VALUE;
+
+        // Set the map value to match the expected result.
+        let header_map_value: u8;
+        match expected_result {
+            RomSize::LoRom => header_map_value = LOROM_VALUE,
+            RomSize::HiRom => header_map_value = HIROM_VALUE,
+            RomSize::ExHiRom => header_map_value = EXHIROM_VALUE
+        }
+        test_header[HDR_MAP_MODE_INDEX] = header_map_value;
+
+        // Calculate the checksum and complement value.
         for byte in test_header.iter() {
             checksum += *byte as u16;
         }
@@ -439,41 +468,27 @@ mod tests {
         test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
         test_header[HDR_CHECKSUM_INDEX + 1] = checksum.to_le_bytes()[1];
 
-        assert_eq!(RomSize::LoRom, test_checksum(checksum, &test_header).unwrap());
-        checksum = 0;
-        
-        // Test HiRom Detection.
-        println!("Checking HiRom...");
-        test_header[HDR_MAP_MODE_INDEX] = HIROM_VALUE;
-        for byte in test_header.iter() {
-            checksum += *byte as u16;
-        }
-        let compare_value: u16 = HDR_TEST_VALUE - checksum;
-        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
-        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
-        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
-        test_header[HDR_CHECKSUM_INDEX + 1] = checksum.to_le_bytes()[1];
+        test_checksum(checksum, &test_header)
+    }
 
-        assert_eq!(RomSize::HiRom, test_checksum(checksum, &test_header).unwrap());
-        checksum = 0;
+    #[test]
+    fn test_lorom_checksum() {
+        assert_eq!(RomSize::LoRom, test_checksum_result(RomSize::LoRom).unwrap());
+    }
 
-        // Test ExHiRom Detection.
-        println!("Checking ExHiRom...");
-        test_header[HDR_MAP_MODE_INDEX] = EXHIROM_VALUE;
-        for byte in test_header.iter() {
-            checksum += *byte as u16;
-        }
-        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
-        test_header[HDR_CHECKSUM_INDEX + 1] = checksum.to_le_bytes()[1];
-        let compare_value: u16 = HDR_TEST_VALUE - checksum;
-        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
-        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
+    #[test]
+    fn test_hirom_checksum()  {
+        assert_eq!(RomSize::HiRom, test_checksum_result(RomSize::HiRom).unwrap());
+    }
 
-        assert_eq!(RomSize::ExHiRom, test_checksum(checksum, &test_header).unwrap());
+    #[test]
+    fn test_exhirom_checksum() {
+        assert_eq!(RomSize::ExHiRom, test_checksum_result(RomSize::ExHiRom).unwrap());
     }
 
     #[test]
     #[should_panic]
+    /// Test if a header with a bad checksum fails.
     fn test_invalid_checksum() {
         // Fill up a random array.
         let mut test_header: Header = rand::thread_rng().gen();
@@ -490,6 +505,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    /// Test if a header with a good checksum, but a bad memory mapping value fails.
     fn test_valid_checksum_with_bad_map() {
         // Fill up a random array.
         let mut test_header: Header = rand::thread_rng().gen();
@@ -501,9 +517,11 @@ mod tests {
             checksum += *byte as u16;
         }
         let compare_value: u16 = HDR_TEST_VALUE - checksum;
+        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
+        test_header[HDR_CHECKSUM_INDEX+1] = checksum.to_le_bytes()[1];
         test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
         test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
-        checksum += 1;
+
         test_checksum(checksum, &test_header).unwrap();
     }
 }

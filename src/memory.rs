@@ -154,8 +154,16 @@ impl fmt::Display for AddressOutOfBoundsError {
     }
 }
 
-pub fn u16_from_bytes(buf: &[u8], low_index: usize, high_index: usize) -> u16 {
-    buf[low_index] as u16 | ((buf[high_index] as u16) << 8) 
+/// Given 2 u8 slices representing a Little Endian u16, craft a Big Endian u16.
+/// Rust cannot make a [u8; 2] from a slice range because the length between the two indices is not guaranteed,
+///     however, since a u8 slice is guaranteed to represent at least one value, this is guaranteed to be valid.
+/// # Parameters:
+///     - `byte_0`:  Pointer to first byte
+///     - `byte_1`:  Pointer to second byte
+/// # Returns:
+///     - u16 value as [byte1 byte0].
+pub fn u16_from_bytes(byte_0: u8, byte_1: u8) -> u16 {
+    byte_0 as u16 | ((byte_1 as u16) << 8) 
 }
 
 /***** File-scope functions *****/
