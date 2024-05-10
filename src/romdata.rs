@@ -390,14 +390,14 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 ///     - `RomSize`:        If the ROM checksum was valid,
 ///     - `RomReadError`:   If the ROM checksum was invalid, with both the calculated and internal values printed.
 fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError> {
-    let test_checksum: u16 = memory::u16_from_bytes(
+    let test_checksum: u16 = u16::from_le_bytes([
         header[HDR_CHECKSUM_INDEX],
         header[HDR_CHECKSUM_INDEX+1]
-    );
-    let test_compare:  u16 = memory::u16_from_bytes(
+    ]);
+    let test_compare:  u16 = u16::from_le_bytes([
         header[HDR_COMPLEMENT_CHECK_INDEX], 
         header[HDR_COMPLEMENT_CHECK_INDEX + 1]
-    );
+    ]);
 
     
     let mut retval: Result<RomSize, RomReadError> = Err(RomReadError::new(

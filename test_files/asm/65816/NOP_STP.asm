@@ -1,3 +1,0 @@
-arch 65816
-NOP
-STP

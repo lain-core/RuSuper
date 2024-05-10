@@ -1,5 +1,4 @@
 use core::fmt;
-use std::num::ParseIntError;
 /* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
 
 const MEMORY_SIZE: usize                = (0xFFFFFF) + 1;   // Total memory is addressable from 0x000000 - 0xFFFFFF
@@ -73,30 +72,11 @@ impl Memory {
         }
     }
 
-    /// Return a constructed word from memory.
-    /// # Parameters:
-    ///     - `self`: Pointer to memory object which contains memory to read from.
-    ///     - `address`: Address of byte to fetch.
-    /// # Returns:
-    ///     - `Ok(value)`   If the argument was valid
-    ///     - `Err(e)`      If the arument was invalid
-    pub fn get_word(&self, address: usize) -> Result<u16, AddressOutOfBoundsError> {
-        match address_is_valid(address) {
-            Ok(_t) => {
-                Ok(self.memory[address] as u16 | (self.memory[address + 1] as u16) << 8)
-            }
-            Err(e) => {
-                Err(e)
-            }
-        }
-        
-    }
-
     /// Put a byte into memory.
     /// # Parameters:
     ///     - `self`:       Pointer to mutable memory object to write word into.
     ///     - `address`:    Location in memory to write to.
-    ///     - `byte`:       Byte to write.
+    ///     - `byte`:       LE-encoded byte to write.
     /// # Returns:
     ///     - `Ok(())`:                     If OK
     ///     - `AddressOutOfBoundsError`:    If an invalid address was passed.
@@ -112,10 +92,10 @@ impl Memory {
         }
     }
 
-    /// Put a word into memory.
+    /// Put a big endian word into memory.
     /// # Parameters:
     ///     - `self`:       Pointer to mutable memory object to write word into.
-    ///     - `address`:    Location in memory to write to.
+    ///     - `address`:    Byte address location in memory to write to (for byte 0).
     ///     - `word`:       Word to write.
     /// # Returns:
     ///     - `Ok(())`:                  if OK
@@ -123,14 +103,39 @@ impl Memory {
     pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), AddressOutOfBoundsError> {
         match address_is_valid(address + 1) {
             Ok(_t) => {
-                self.memory[address]        = ((word & 0xFF00) >> 8) as u8;
-                self.memory[address + 1]    = (word & 0x00FF) as u8;
+                unsafe {
+                    let word_ptr: *mut u16 = self.memory.as_mut_slice().as_mut_ptr().add(address).cast::<u16>();
+                    *word_ptr = word;
+                }
                 Ok(())
             }
             Err(e) => {
                 Err(e)
             }
         }
+    }
+
+    /// Fetch a word from memory in 
+    /// # Parameters:
+    ///     - `self`: Pointer to memory object which contains memory to read from.
+    ///     - `address`: Address of byte to fetch.
+    /// # Returns:
+    ///     - `Ok(value)`   If the argument was valid
+    ///     - `Err(e)`      If the arument was invalid
+    pub fn get_word(&self, address: usize) -> Result<u16, AddressOutOfBoundsError> {
+        match address_is_valid(address + 1) {
+            Ok(_t) => {
+                // This operation should not actually be unsafe as the address of byte 1 is already validated.
+                unsafe {
+                    let word_ptr: *const u16 = self.memory.as_slice().as_ptr().add(address).cast::<u16>();
+                    Ok((*word_ptr).to_be())
+                }
+            }
+            Err(e) => {
+                Err(e)
+            }
+        }
+        
     }
 }
 
@@ -154,18 +159,6 @@ impl fmt::Display for AddressOutOfBoundsError {
     }
 }
 
-/// Given 2 u8 slices representing a Little Endian u16, craft a Big Endian u16.
-/// Rust cannot make a [u8; 2] from a slice range because the length between the two indices is not guaranteed,
-///     however, since a u8 slice is guaranteed to represent at least one value, this is guaranteed to be valid.
-/// # Parameters:
-///     - `byte_0`:  Pointer to first byte
-///     - `byte_1`:  Pointer to second byte
-/// # Returns:
-///     - u16 value as [byte1 byte0].
-pub fn u16_from_bytes(byte_0: u8, byte_1: u8) -> u16 {
-    byte_0 as u16 | ((byte_1 as u16) << 8) 
-}
-
 /***** File-scope functions *****/
 
 /// Given an 8-bit bank reference and a 16-bit address within that bank, return the composed address that points to.
@@ -185,10 +178,11 @@ pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
 ///     - `Ok(true)` for a valid address
 ///     - `AddressOutOfBoundsError(address)` for an invalid address
 pub fn address_is_valid(address: usize) -> Result<(), AddressOutOfBoundsError> {
-    if address <= MEMORY_SIZE {
+    if address < MEMORY_SIZE {
         Ok(())
     }
     else {
+        println!("Error");
         Err(AddressOutOfBoundsError::new(address))
     }
 }
@@ -196,6 +190,8 @@ pub fn address_is_valid(address: usize) -> Result<(), AddressOutOfBoundsError> {
 /***** Tests *****/
 #[cfg(test)]
 mod tests {
+    use crate::memory;
+
     use super::*;
     use rand::Rng;
 
@@ -254,5 +250,77 @@ mod tests {
     fn test_get_invalid_byte() {
         let memory_under_test = Memory::new();
         let _ = &memory_under_test.get_byte(MEMORY_SIZE).unwrap();
+    }
+
+    #[test]
+    fn test_put_word() {
+        let mut memory_under_test: Memory = Memory::new();
+        let mut random_data: Box<[u16; MEMORY_SIZE/2]> = vec![0; MEMORY_SIZE/2].into_boxed_slice().try_into().unwrap();
+
+        memory_under_test.put_word(0x000000, 0xAABB).unwrap();
+        assert_eq!(memory_under_test.memory[0], 0xBB);
+        assert_eq!(memory_under_test.memory[1], 0xAA); 
+
+        let mut rand_word: u16;
+        for addr in 0..MEMORY_SIZE {
+            if addr % 2 == 0 {
+                rand_word = rand::thread_rng().gen();
+                random_data[addr/2] = rand_word;
+                memory_under_test.put_word(addr, rand_word).unwrap();
+            }
+        }
+
+        for addr in 0..MEMORY_SIZE {
+            if addr % 2 == 0 {
+                let test_word: u16 = u16::from_le_bytes([
+                    memory_under_test.memory[addr],
+                    memory_under_test.memory[addr+1]
+                ]);
+                assert_eq!(random_data[addr/2], test_word);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_put_invalid_word() {
+        let mut memory_under_test: Memory = Memory::new();
+        memory_under_test.put_word(MEMORY_SIZE + 1, 0).unwrap();
+    }
+
+    #[test]
+    fn test_get_word() {
+        let mut memory_under_test: Memory = Memory::new();
+        let mut random_data: Box<[u16; MEMORY_SIZE/2]> = vec![0; MEMORY_SIZE/2].into_boxed_slice().try_into().unwrap();
+
+        memory_under_test.memory[0] = 0xAA;
+        memory_under_test.memory[1] = 0xBB; 
+        assert_eq!(memory_under_test.get_word(0x000000).unwrap(), 0xAABB);
+
+        let mut rand_word: u16;
+        for addr in 0..MEMORY_SIZE {
+            if addr % 2 == 0 {
+                rand_word = rand::thread_rng().gen();
+                random_data[addr/2] = rand_word;
+                memory_under_test.put_word(addr, rand_word).unwrap();
+            }
+        }
+
+        for addr in 0..MEMORY_SIZE {
+            if addr % 2 == 0 {
+                let test_word: u16 = u16::from_le_bytes([
+                    memory_under_test.memory[addr],
+                    memory_under_test.memory[addr+1]
+                ]);
+                assert_eq!(random_data[addr/2], test_word);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_get_invalid_word() {
+        let memory_under_test: Memory = Memory::new();
+        memory_under_test.get_word(MEMORY_SIZE).unwrap();
     }
 }
