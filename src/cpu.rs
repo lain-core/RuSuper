@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time};
+use std::time;
 use crate::{memory, romdata};
 
 // Instructions mod declarations
@@ -339,13 +339,6 @@ struct CpuInstruction {
     function: fn(&mut CpuState, &mut memory::Memory, u16) -> bool
 }
 
-impl CpuInstruction {
-    /// Generates a NOP.
-    pub fn new() -> Self {
-        Self { opcode: CpuOpcode::NOP, width: CpuParamWidth::NO, function: misc::nop }
-    }
-}
-
 /// Virtualized representation of the CPU internally.
 #[derive(Debug)]
 pub struct CpuState {
@@ -431,7 +424,7 @@ impl CpuState {
 /// Also manages timings and delegates to other legs of the system. Might be worth breaking up in the future.
 /// # Parameters
 ///     - `vm`  Object holding CPU state and Memory for this instance.
-pub fn run(mut path: std::path::PathBuf) {
+pub fn run(path: std::path::PathBuf) {
     // TODO: Spin off thread for debugger
     // TODO: Spin off thread for SPC700
     // TODO: Spin off thread for PPU(?)

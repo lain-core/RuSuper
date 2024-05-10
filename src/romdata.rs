@@ -1,25 +1,30 @@
+// #![allow(unused)]
+// There are a lot of currently unused const values in this file, but they are important to structural understanding
+//  and may become more useful in the future. This is disabled while still implementing functions.
+
 use core::fmt;
 use std::{fmt::Display, fs, io::Read, num::Wrapping, path::PathBuf};
-use crate::memory::{self, IntoWord};
+
+use crate::memory;
 
 /********************************* ROM Info Constants **************************************************/
 
 /// Layout in memory is low->high [Optional Header, Header, Exception Vectors]. Always lives at the end of the first bank of a ROM.
 /// Optional Header Breakdown (16 bytes)
-const _OPT_MAKER_CODE_LEN:               usize = 2;
-const _OPT_GAME_CODE_LEN:                usize = 4;
-const _OPT_FIXED_VAL_LEN:                usize = 7;
-const _OPT_EXPANSION_RAM_LEN:            usize = 1;
-const _OPT_SPECIAL_VERSION_LEN:          usize = 1;
-const _OPT_SUB_CART_TYPE_LEN:            usize = 1;
-const OPT_HEADER_LEN_BYTES:              usize = 16;
+const OPT_MAKER_CODE_LEN:               usize = 2;
+const OPT_GAME_CODE_LEN:                usize = 4;
+const OPT_FIXED_VAL_LEN:                usize = 7;
+const OPT_EXPANSION_RAM_LEN:            usize = 1;
+const OPT_SPECIAL_VERSION_LEN:          usize = 1;
+const OPT_SUB_CART_TYPE_LEN:            usize = 1;
+const OPT_HEADER_LEN_BYTES:             usize = 16;
 
-const _OPT_MAKER_CODE_INDEX:             usize = 0;
-const _OPT_GAME_CODE_INDEX:              usize = _OPT_MAKER_CODE_LEN;
-const _OPT_FIXED_VAL_INDEX:              usize = _OPT_GAME_CODE_INDEX + _OPT_GAME_CODE_LEN;
-const _OPT_EXPANSION_RAM_INDEX:          usize = _OPT_FIXED_VAL_INDEX + _OPT_FIXED_VAL_LEN;
-const _OPT_SPECIAL_VERSION_INDEX:        usize = _OPT_EXPANSION_RAM_INDEX + _OPT_EXPANSION_RAM_LEN;
-const _OPT_SUB_CART_TYPE_INDEX:          usize = _OPT_SPECIAL_VERSION_INDEX + _OPT_SUB_CART_TYPE_LEN;
+const OPT_MAKER_CODE_INDEX:             usize = 0;
+const OPT_GAME_CODE_INDEX:              usize = OPT_MAKER_CODE_LEN;
+const OPT_FIXED_VAL_INDEX:              usize = OPT_GAME_CODE_INDEX + OPT_GAME_CODE_LEN;
+const OPT_EXPANSION_RAM_INDEX:          usize = OPT_FIXED_VAL_INDEX + OPT_FIXED_VAL_LEN;
+const OPT_SPECIAL_VERSION_INDEX:        usize = OPT_EXPANSION_RAM_INDEX + OPT_EXPANSION_RAM_LEN;
+const OPT_SUB_CART_TYPE_INDEX:          usize = OPT_SPECIAL_VERSION_INDEX + OPT_SUB_CART_TYPE_LEN;
 
 /// Header Breakdown (32 bytes)
 const HDR_TITLE_LEN:                    usize = 21;
@@ -55,11 +60,11 @@ const EV_NATIVE_COP_LEN:                usize = 2;
 const EV_NATIVE_BRK_LEN:                usize = 2;
 const EV_NATIVE_ABORT_LEN:              usize = 2;
 const EV_NATIVE_NMI_LEN:                usize = 2;
-const _EV_NATIVE_UNUSED_2_LEN:          usize = 2;
+const EV_NATIVE_UNUSED_2_LEN:          usize = 2;
 const EV_NATIVE_IRQ_LEN:                usize = 2;
-const _EV_EMU_UNUSED_1_LEN:             usize = 4;
+const EV_EMU_UNUSED_1_LEN:             usize = 4;
 const EV_EMU_COP_LEN:                   usize = 2;
-const _EV_EMU_UNUSED_2_LEN:             usize = 2;
+const EV_EMU_UNUSED_2_LEN:             usize = 2;
 const EV_EMU_ABORT_LEN:                 usize = 2;
 const EV_EMU_NMI_LEN:                   usize = 2;
 const EV_EMU_RESET_LEN:                 usize = 2;
@@ -72,11 +77,11 @@ const EV_NATIVE_BRK_INDEX:              usize = EV_NATIVE_COP_INDEX + EV_NATIVE_
 const EV_NATIVE_ABORT_INDEX:            usize = EV_NATIVE_BRK_INDEX + EV_NATIVE_BRK_LEN;
 const EV_NATIVE_NMI_INDEX:              usize = EV_NATIVE_ABORT_INDEX + EV_NATIVE_ABORT_LEN;
 // NATIVE UNUSED 2
-const EV_NATIVE_IRQ_INDEX:              usize = EV_NATIVE_NMI_INDEX + _EV_NATIVE_UNUSED_2_LEN;
+const EV_NATIVE_IRQ_INDEX:              usize = EV_NATIVE_NMI_INDEX + EV_NATIVE_UNUSED_2_LEN;
 // EMU UNUSED 1
-const EV_EMU_COP_INDEX:                 usize = EV_NATIVE_IRQ_INDEX + _EV_EMU_UNUSED_2_LEN;
+const EV_EMU_COP_INDEX:                 usize = EV_NATIVE_IRQ_INDEX + EV_EMU_UNUSED_2_LEN;
 // EMU UNUSED 2
-const EV_EMU_ABORT_INDEX:               usize = EV_EMU_COP_INDEX + _EV_EMU_UNUSED_2_LEN;
+const EV_EMU_ABORT_INDEX:               usize = EV_EMU_COP_INDEX + EV_EMU_UNUSED_2_LEN;
 const EV_EMU_NMI_INDEX:                 usize = EV_EMU_ABORT_INDEX + EV_EMU_ABORT_LEN;
 const EV_EMU_RESET_INDEX:               usize = EV_EMU_NMI_INDEX + EV_EMU_NMI_LEN;
 const EV_EMU_IRQ_BRK_INDEX:             usize = EV_EMU_RESET_INDEX + EV_EMU_RESET_LEN;
@@ -107,7 +112,7 @@ pub const ROM_BASE_ADDR:                u16 = 0x8000;    // All LoRom banks, and
 
 /********************************* ROM Info Enums & Struct Definitions *********************************/
 /// Info pertaining to the memory map and size of the ROM.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RomSize {
     LoRom,
     HiRom,
@@ -151,8 +156,8 @@ pub enum RomCoProcessor {
     DSP                 = 0x00,
     SuperFX             = 0x01,
     OBC1                = 0x02,
-    S_DD1               = 0x03,
-    S_RTC               = 0x04,
+    SDD1               = 0x03,
+    SRTC               = 0x04,
     Other               = 0x05,
     Custom              = 0xFF
 }
@@ -161,7 +166,7 @@ pub enum RomCoProcessor {
 #[repr(u8)]
 pub enum CustomCoProcessor {
     SPC7110             = 0x00,
-    ST010_ST011         = 0x01,
+    ST010_11            = 0x01,
     ST018               = 0x02,
     CX4                 = 0x03,
 }
@@ -374,14 +379,15 @@ fn gather_mapping(header: &Header) -> Result<RomModeMapping, RomReadError> {
 ///     - `RomSize`:        If the ROM checksum was valid,
 ///     - `RomReadError`:   If the ROM checksum was invalid, with both the calculated and internal values printed.
 fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError> {
-    let test_checksum: [u8; 2] = header[HDR_CHECKSUM_INDEX .. HDR_CHECKSUM_INDEX + 1].try_into().unwrap();
-    let test_compare: [u8; 2] = header[HDR_COMPLEMENT_CHECK_INDEX .. HDR_COMPLEMENT_CHECK_INDEX + 1].try_into().unwrap();
+    let test_checksum: u16 = memory::u16_from_bytes(header, HDR_CHECKSUM_INDEX, HDR_CHECKSUM_INDEX + 1);
+    let test_compare:  u16 = memory::u16_from_bytes(header, HDR_COMPLEMENT_CHECK_INDEX, HDR_COMPLEMENT_CHECK_INDEX + 1);
+
     
     let mut retval: Result<RomSize, RomReadError> = Err(RomReadError::new(
-        format!("ROM Checksum was invalid.\nCalculated Checksum: {:#06X}\nROM Checksum: {:#06X}", checksum, test_checksum.to_word()).to_string()
+        format!("ROM Checksum was invalid.\nCalculated Checksum: {:#06X}\nROM Checksum: {:#06X}", checksum, test_checksum)
     ));
-    if checksum == test_checksum.to_word() && 
-        ((Wrapping(checksum) + Wrapping(test_compare.to_word())).0 == HDR_TEST_VALUE) {
+    if checksum == test_checksum && 
+        ((Wrapping(checksum) + Wrapping(test_compare)).0 == HDR_TEST_VALUE) {
         // This rom looks good. Get the size of the rom and throw it back out.
         let rom_map_mode: u8 = header[HDR_MAP_MODE_INDEX];
         if (rom_map_mode & MAP_EXHIROM_MASK) != 0 {
@@ -393,9 +399,111 @@ fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError
         else if (rom_map_mode & MAP_BASE_MASK) != 0 {
             retval = Ok(RomSize::LoRom);
         }
+        else { 
+            retval = Err(RomReadError::new(
+                "ROM Checksum was valid, but mapping mode was unreadable".to_string()
+            ));
+        }
     }
 
     return retval;
 }
 
 /********************************* ROM Info Tests ******************************************************/
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::Rng;
+
+    const LOROM_VALUE: u8   = 0x20;
+    const HIROM_VALUE: u8   = 0x21;
+    const EXHIROM_VALUE: u8 = 0x25;
+    const INVALID_MAP_VALUE: u8 = 0xC0;
+
+    #[test]
+    fn test_test_checksum() {
+
+        // Fill up a random array.
+        let mut test_header: Header = rand::thread_rng().gen();
+        let mut checksum: u16 = 0;
+
+        // Test LoRom Detection.
+        println!("Checking LoRom...");
+        test_header[HDR_MAP_MODE_INDEX] = LOROM_VALUE;
+        for byte in test_header.iter() {
+            checksum += *byte as u16;
+        }
+        let compare_value: u16 = HDR_TEST_VALUE - checksum;
+        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
+        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
+        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
+        test_header[HDR_CHECKSUM_INDEX + 1] = checksum.to_le_bytes()[1];
+
+        assert_eq!(RomSize::LoRom, test_checksum(checksum, &test_header).unwrap());
+        checksum = 0;
+        
+        // Test HiRom Detection.
+        println!("Checking HiRom...");
+        test_header[HDR_MAP_MODE_INDEX] = HIROM_VALUE;
+        for byte in test_header.iter() {
+            checksum += *byte as u16;
+        }
+        let compare_value: u16 = HDR_TEST_VALUE - checksum;
+        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
+        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
+        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
+        test_header[HDR_CHECKSUM_INDEX + 1] = checksum.to_le_bytes()[1];
+
+        assert_eq!(RomSize::HiRom, test_checksum(checksum, &test_header).unwrap());
+        checksum = 0;
+
+        // Test ExHiRom Detection.
+        println!("Checking ExHiRom...");
+        test_header[HDR_MAP_MODE_INDEX] = EXHIROM_VALUE;
+        for byte in test_header.iter() {
+            checksum += *byte as u16;
+        }
+        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
+        test_header[HDR_CHECKSUM_INDEX + 1] = checksum.to_le_bytes()[1];
+        let compare_value: u16 = HDR_TEST_VALUE - checksum;
+        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
+        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
+
+        assert_eq!(RomSize::ExHiRom, test_checksum(checksum, &test_header).unwrap());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_checksum() {
+        // Fill up a random array.
+        let mut test_header: Header = rand::thread_rng().gen();
+        let mut checksum: u16 = 0;
+        
+        // Test LoRom Detection.
+        test_header[HDR_MAP_MODE_INDEX] = LOROM_VALUE;
+        for byte in test_header.iter() {
+            checksum += *byte as u16;
+        }
+        checksum += 1;
+        test_checksum(checksum, &test_header).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_valid_checksum_with_bad_map() {
+        // Fill up a random array.
+        let mut test_header: Header = rand::thread_rng().gen();
+        let mut checksum: u16 = 0;
+        
+        // Test LoRom Detection.
+        test_header[HDR_MAP_MODE_INDEX] = INVALID_MAP_VALUE;
+        for byte in test_header.iter() {
+            checksum += *byte as u16;
+        }
+        let compare_value: u16 = HDR_TEST_VALUE - checksum;
+        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
+        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
+        checksum += 1;
+        test_checksum(checksum, &test_header).unwrap();
+    }
+}

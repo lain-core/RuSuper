@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{fs, io::Read};
+use std::num::ParseIntError;
 /* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
 
 const MEMORY_SIZE: usize                = (0xFFFFFF) + 1;   // Total memory is addressable from 0x000000 - 0xFFFFFF
@@ -7,11 +7,6 @@ pub const MEMORY_END:  usize            = 0x7FFFFF;         // Memory commonly e
 pub const MEMORY_BANK_COUNT: usize      =     0xFF;         // Number of addressable memory banks.
 pub const MEMORY_BANK_SIZE: usize       =   0xFFFF;         // Size of one memory bank.
 pub const MEMORY_BANK_INDEX: u8         = 16;               // Bit index to shift a u8 by to obtain a bank address.
-
-/// Individual
-/// TODO: Do I need to make a better structure for this?
-const LOW_RAM_MIRROR: usize         =   0x0000;
-const HW_REGISTERS: usize           =   0x2000;
 
 type MemoryData = Box<[u8; MEMORY_SIZE]>;
 
@@ -101,7 +96,10 @@ impl Memory {
     /// # Parameters:
     ///     - `self`:       Pointer to mutable memory object to write word into.
     ///     - `address`:    Location in memory to write to.
-    ///     - `word`:       Word to write.
+    ///     - `byte`:       Byte to write.
+    /// # Returns:
+    ///     - `Ok(())`:                     If OK
+    ///     - `AddressOutOfBoundsError`:    If an invalid address was passed.
     pub fn put_byte(&mut self, address: usize, byte: u8) -> Result<(), AddressOutOfBoundsError> {
         match address_is_valid(address) {
             Ok(_t) => {
@@ -119,8 +117,11 @@ impl Memory {
     ///     - `self`:       Pointer to mutable memory object to write word into.
     ///     - `address`:    Location in memory to write to.
     ///     - `word`:       Word to write.
+    /// # Returns:
+    ///     - `Ok(())`:                  if OK
+    ///     - `AddressOutOfBoundsError`: if an invalid address is passed in.
     pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), AddressOutOfBoundsError> {
-        match address_is_valid(address) {
+        match address_is_valid(address + 1) {
             Ok(_t) => {
                 self.memory[address]        = ((word & 0xFF00) >> 8) as u8;
                 self.memory[address + 1]    = (word & 0x00FF) as u8;
@@ -153,14 +154,8 @@ impl fmt::Display for AddressOutOfBoundsError {
     }
 }
 
-pub trait IntoWord {
-    fn to_word(self) -> u16;
-}
-
-impl IntoWord for &[u8; 2] {
-    fn to_word(self) -> u16 {
-        ((self[0] as u16) >> 8 | (self[1] as u16) << 8) as u16
-    }
+pub fn u16_from_bytes(buf: &[u8], low_index: usize, high_index: usize) -> u16 {
+    buf[low_index] as u16 | ((buf[high_index] as u16) << 8) 
 }
 
 /***** File-scope functions *****/
