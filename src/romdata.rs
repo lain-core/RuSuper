@@ -96,7 +96,7 @@ const LO_ROM_EXT_HEADER_ADDR:           usize = LO_ROM_HEADER_ADDR - OPT_HEADER_
 /// HiRom specific values
 const HI_ROM_BANK_ADDR:                 u8 = 0xC0;      // HiRom starts at bank $C00000 through to $FFFFFF.
 const HI_ROM_BANK_SIZE_BYTES:           usize = 64 * 1024; // HiRom, ExHiRom Bank size is 64 KiB
-const HI_ROM_EXC_VECTOR_ADDR:           usize = LO_ROM_BANK_SIZE_BYTES - EV_LEN_BYTES;
+const HI_ROM_EXC_VECTOR_ADDR:           usize = HI_ROM_BANK_SIZE_BYTES - EV_LEN_BYTES;
 const HI_ROM_HEADER_ADDR:               usize = HI_ROM_EXC_VECTOR_ADDR - HDR_LEN_BYTES;
 const HI_ROM_EXT_HEADER_ADDR:           usize = HI_ROM_HEADER_ADDR - OPT_HEADER_LEN_BYTES;
 
@@ -114,15 +114,17 @@ const MAP_FASTROM_MASK:                 u8 = 0b00010000;
 const MAP_BASE_MASK:                    u8 = 0b00100000;
 /// Public constants
 pub const ROM_BASE_ADDR:                u16 = 0x8000;    // All LoRom banks, and mirrored banks of both Lo and HiRom fall under $XX8000. E.G.: Bank 0: $808000, Bank 1: $908000
-
+pub const TOTAL_HDR_BYTES:              usize = OPT_HEADER_LEN_BYTES + HDR_LEN_BYTES + EV_LEN_BYTES;
 /********************************* ROM Info Enums & Struct Definitions *********************************/
 /// Info pertaining to the memory map and size of the ROM.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(usize)]
 pub enum RomSize {
-    LoRom,
-    HiRom,
-    ExHiRom
+    LoRom   = LO_ROM_HEADER_ADDR,
+    HiRom   = HI_ROM_HEADER_ADDR,
+    ExHiRom = EX_HI_ROM_HEADER_ADDR
 }
+const ROM_SIZE_NUM: usize = 3; // You cannot enumerate an enum in rust without an additional library
 
 /// Info pertaining to the CPU clock speed the SNES runs at for this ROM.
 /// SlowRom = 2.68MHz
@@ -167,7 +169,7 @@ pub enum RomCoProcessor {
     Custom              = 0xFF
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CustomCoProcessor {
     SPC7110             = 0x00,
@@ -273,12 +275,14 @@ impl Display for RomReadError {
 /// # Parameters:
 ///     - `path`:       Path to file to open
 ///     - `memory`:     Memory to prepare.
-pub fn load_rom(path: PathBuf, mut memory: &memory::Memory) -> Result<(), RomReadError> {
+pub fn load_rom(path: PathBuf, mut memory: &memory::Memory) -> Result<RomData, RomReadError> {
     // Attempt to read to buffer.
     let rom = read_rom_to_buf(path)?;
-    let mut header = fetch_header(&rom)?;
+    let mut data = fetch_header(&rom)?;
+    let customProc = fetch_opt_header(&rom, &mut data);
+    fetch_exception_vectors(&rom, &mut data);
 
-    Ok(())
+    Ok(data)
 }
 
 /// Check file, attempt to read, and then discern information about it. If possible, populate the memory.
@@ -326,60 +330,85 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
 /// # Parameters: 
 ///     - `rom`:    Pointer to rom data to analyze.
 /// # Returns:
-///     - `HeaderData` struct with copies of the Header, Exception Vector, and Optional Header (if present) values.
-///     - `RomReadError` if the 
+///     - `Header`:      The header for this rom, if found.
+///     - `RomReadError` If the header was unparseable.
 fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
     let mut retval: Result<RomData, RomReadError> = Err(RomReadError::new("".to_string()));
-    let mut data = RomData::new();
+    let mut test_header: Header = [0; HDR_LEN_BYTES];
 
     // Sum all bytes in the file. overflow is fine.
     let mut checksum: Wrapping<u16> = Wrapping(0);
     let _ = rom.iter().map(|x| checksum += Wrapping(*x as u16));
     
-    let mut checksum_valid: Result<RomSize, RomReadError>;
 
-    // Check the bounds, then excise where a header would be and test for the mapping.
-    // TODO: There is a much prettier way to manage this I'm sure.
+    const ROM_OPTIONS: [RomSize; ROM_SIZE_NUM] = [RomSize::ExHiRom, RomSize::HiRom, RomSize::LoRom];
+    for size in ROM_OPTIONS.iter() {
+        test_header.clone_from_slice(&rom[*size as usize .. *size as usize + HDR_LEN_BYTES]);
 
-    // A ROM can only be an ExHiRom if it is > 4MiB + 1 bank in size.
-    if rom.capacity() > EX_HI_ROM_EXC_VECTOR_ADDR {
-        data.header.clone_from_slice(&rom[EX_HI_ROM_EXT_HEADER_ADDR .. (EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES)]);
-        checksum_valid = test_checksum(checksum.0, &data.header);
-    }
-    // If the ROM is > HI_ROM_BANK_SIZE_BYTES in length, it could be a hirom or a lorom.
-    else if rom.capacity() >= HI_ROM_BANK_SIZE_BYTES {
-        // Test if this is a HiRom.
-        data.header.clone_from_slice(&rom[HI_ROM_EXT_HEADER_ADDR .. (HI_ROM_BANK_SIZE_BYTES - 1)]);
-        checksum_valid = test_checksum(checksum.0, &data.header);
-
-        if checksum_valid.is_err() {
-            // Test if this is a LoRom.
-            data.header.clone_from_slice(&rom[LO_ROM_EXT_HEADER_ADDR .. (LO_ROM_BANK_SIZE_BYTES - 1)]);
-            checksum_valid = test_checksum(checksum.0, &data.header);
+        match test_checksum(checksum.0, &test_header) {
+            Ok(tested_size) => {
+                return Ok(RomData {
+                    header: test_header,
+                    opt_header: [0; OPT_HEADER_LEN_BYTES],
+                    exception_vectors: [0; EV_LEN_BYTES],
+                    opt_is_present: false,
+                    mem_map: tested_size
+                });
+            }
+            Err(e) => {
+                retval = Err(e);
+            }
         }
     }
-    // Otherwise it could only possibly be a LoRom.
-    else if rom.capacity() >= LO_ROM_BANK_SIZE_BYTES
-    {
-        // Test if this is a LoRom.
-        data.header.clone_from_slice(&rom[LO_ROM_EXT_HEADER_ADDR .. (LO_ROM_BANK_SIZE_BYTES)]);
-        checksum_valid = test_checksum(checksum.0, &data.header);
-    }
-    else {
-        checksum_valid = Err(RomReadError{ context: "File was too small to contain header".to_string() });
-    }
-
-    // If we got a valid checksum, use the returned size to populate a new RomData object.
-    if checksum_valid.is_ok() {
-        if data.header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT {
-            data.opt_is_present = true;
-            // data.opt_header = fetch_opt_header(&rom, &checksum_valid.unwrap());
-        }
-
-        // data.exception_vectors = fetch_exception_vectors(&rom, &checksum_valid.unwrap());        
-    }
-
     return retval;
+}
+
+/// Take a RomData object, see if this rom has an optional header, and if so, populate those values.
+/// # Parameters:
+///     - `rom`:        A Rom to pull data from.
+///     - `data`:       A RomData object.
+/// # Returns:
+///     - `Some(CustomCoProcessor)`:    If the rom indicates coprocessor but not complete.
+///     - `None`:                       Otherwise.
+fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) -> Option<CustomCoProcessor>{
+    let header_addr: usize;
+    match &data.mem_map {
+        RomSize::LoRom => header_addr = LO_ROM_EXT_HEADER_ADDR,
+        RomSize::HiRom => header_addr = HI_ROM_EXT_HEADER_ADDR,
+        RomSize::ExHiRom => header_addr = EX_HI_ROM_EXT_HEADER_ADDR
+    }
+
+    if data.header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT {
+        data.opt_is_present = true;
+        data.opt_header.clone_from_slice(
+            &rom[header_addr .. header_addr + OPT_HEADER_LEN_BYTES]
+        );
+    }
+    else if data.header[HDR_FIXED_VAL_INDEX] == HDR_SUBTYPE_PRESENT {
+        return match &rom[header_addr + OPT_SUB_CART_TYPE_INDEX] {
+            0x00 => Some(CustomCoProcessor::SPC7110),
+            0x01 => Some(CustomCoProcessor::ST010_11),
+            0x02 => Some(CustomCoProcessor::ST018),
+            0x03 => Some(CustomCoProcessor::CX4),
+            _    => None
+        };
+    }
+    
+    return None;
+}
+
+/// Fetch the exception vector table from a rom.
+/// # Parameters:
+///     - `rom`:    Rom to read from.
+///     - `data`:   Pointer to RomData to populate.
+fn fetch_exception_vectors(rom: &Vec<u8>, data: &mut RomData) {
+    let header_addr: usize;
+    match &data.mem_map {
+        RomSize::LoRom => header_addr = LO_ROM_EXC_VECTOR_ADDR,
+        RomSize::HiRom => header_addr = HI_ROM_EXC_VECTOR_ADDR,
+        RomSize::ExHiRom => header_addr = EX_HI_ROM_EXC_VECTOR_ADDR
+    }
+    data.exception_vectors.clone_from_slice(&rom[header_addr .. header_addr + EV_LEN_BYTES]);
 }
 
 /// Test if the checksum for this file is valid, and if so, check the map byte and return the result.
@@ -430,7 +459,7 @@ fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
+    use rand::{Rng, RngCore};
 
     const LOROM_VALUE: u8   = 0x20;
     const HIROM_VALUE: u8   = 0x21;
@@ -524,4 +553,98 @@ mod tests {
 
         test_checksum(checksum, &test_header).unwrap();
     }
+
+    fn test_fetch_optional_header(expected_type: RomSize){
+        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
+        let mut test_rom: Box<[u8; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]> = vec![0; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES].into_boxed_slice().try_into().unwrap();
+        rand::thread_rng().fill_bytes(&mut *test_rom);
+        let mut data: RomData = RomData::new();
+        data.mem_map = expected_type;
+        data.header[HDR_FIXED_VAL_INDEX] = HDR_OPT_PRESENT; 
+
+        let header_location: usize;
+        match expected_type {
+            RomSize::LoRom => header_location = LO_ROM_EXT_HEADER_ADDR,
+            RomSize::HiRom => header_location = HI_ROM_EXT_HEADER_ADDR,
+            RomSize::ExHiRom => header_location = EX_HI_ROM_EXT_HEADER_ADDR
+        }
+
+        fetch_opt_header(&test_rom.to_vec(), &mut data);
+
+        for byte in 0..OPT_HEADER_LEN_BYTES {
+            assert_eq!(test_rom[header_location + byte], data.opt_header[byte]);
+        }
+    }
+
+    #[test]
+    fn test_fetch_optional_lorom() {
+        test_fetch_optional_header(RomSize::LoRom);
+    }
+
+    #[test]
+    fn test_fetch_optional_hirom() {
+        test_fetch_optional_header(RomSize::HiRom);
+    }
+
+    #[test]
+    fn test_fetch_optional_exhirom() {
+        test_fetch_optional_header(RomSize::ExHiRom);
+    }
+
+    #[test]
+    fn test_fetch_optional_coprocessors() {
+        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
+        let mut test_rom: Box<[u8; LO_ROM_BANK_SIZE_BYTES]> = vec![0; LO_ROM_BANK_SIZE_BYTES].into_boxed_slice().try_into().unwrap();
+        rand::thread_rng().fill_bytes(&mut *test_rom);
+        let mut data: RomData = RomData::new();
+        data.header[HDR_FIXED_VAL_INDEX] = HDR_SUBTYPE_PRESENT;
+
+        for i in 0x00..=0x05 {
+            test_rom[LO_ROM_EXT_HEADER_ADDR + OPT_SUB_CART_TYPE_INDEX] = i as u8;
+            match i {
+                0x00 => assert_eq!(CustomCoProcessor::SPC7110, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
+                0x01 => assert_eq!(CustomCoProcessor::ST010_11, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
+                0x02 => assert_eq!(CustomCoProcessor::ST018, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
+                0x03 => assert_eq!(CustomCoProcessor::CX4, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
+                _ => assert!(fetch_opt_header(&test_rom.to_vec(), &mut data).is_none())
+            }
+        } 
+    }
+
+    fn test_fetch_exception_headers(expected_type: RomSize) {
+        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
+        let mut test_rom: Box<[u8; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]> = vec![0; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES].into_boxed_slice().try_into().unwrap();
+        rand::thread_rng().fill_bytes(&mut *test_rom);
+        let mut data: RomData = RomData::new();
+        data.mem_map = expected_type;
+
+        let header_location: usize;
+        match expected_type {
+            RomSize::LoRom => header_location = LO_ROM_EXC_VECTOR_ADDR,
+            RomSize::HiRom => header_location = HI_ROM_EXC_VECTOR_ADDR,
+            RomSize::ExHiRom => header_location = EX_HI_ROM_EXC_VECTOR_ADDR
+        }
+
+        fetch_exception_vectors(&test_rom.to_vec(), &mut data);
+
+        for byte in 0..OPT_HEADER_LEN_BYTES {
+            assert_eq!(test_rom[header_location + byte], data.exception_vectors[byte]);
+        }
+    }
+
+    #[test]
+    fn test_fetch_exception_headers_lorom() {
+        test_fetch_exception_headers(RomSize::LoRom);
+    }
+
+    #[test]
+    fn test_fetch_exception_headers_hirom() {
+        test_fetch_exception_headers(RomSize::HiRom);
+    }
+
+    #[test]
+    fn test_fetch_exception_headers_exhirom() {
+        test_fetch_exception_headers(RomSize::ExHiRom);
+    }
+
 }

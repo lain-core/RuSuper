@@ -193,7 +193,7 @@ mod tests {
     use crate::memory;
 
     use super::*;
-    use rand::Rng;
+    use rand::{Rng, RngCore};
 
     /// Given a memory ptr fill it with random test data, and return the random test data it was filled from.
     /// # Parameters:
@@ -202,11 +202,10 @@ mod tests {
     ///     - `random_data`:            Randomly generated list of u8s.
     fn fill_random(memory_under_test: &mut Memory) -> MemoryData {
         let mut random_data: MemoryData = vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
+        rand::thread_rng().fill_bytes(&mut *random_data);
 
-        for addr in 0 .. MEMORY_END {
-            let rand_byte: u8 = rand::thread_rng().gen();
-            random_data[addr] = rand_byte;
-            memory_under_test.memory[addr] = rand_byte;
+        for addr in 0..MEMORY_SIZE {
+            memory_under_test.memory[addr] = random_data[addr];
         }
 
         random_data
@@ -216,11 +215,10 @@ mod tests {
     fn test_put_byte() {
         let mut memory_under_test = Memory::new();
         let mut random_data: Box<[u8; MEMORY_SIZE]> = vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
+        rand::thread_rng().fill_bytes(&mut *random_data);
 
         for addr in 0 .. MEMORY_END {
-            let rand_byte: u8 = rand::thread_rng().gen();
-            random_data[addr] = rand_byte;
-            memory_under_test.put_byte(addr, rand_byte).unwrap();
+            memory_under_test.put_byte(addr, random_data[addr]).unwrap();
         }
 
         for addr in 0 .. MEMORY_END {
