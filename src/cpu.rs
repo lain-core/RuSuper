@@ -431,7 +431,7 @@ pub fn run(path: std::path::PathBuf) {
 
     // Initialize the VM and then load the ROM into memory.
     let mut vm = VirtualMachine::new();
-    romdata::load_rom(path, &mut vm.memory);
+    vm.romdata = romdata::load_rom(path, &mut vm.memory).unwrap();
 
     // Debugger loop which parses user inputs. 
     let mut vm_running = true;

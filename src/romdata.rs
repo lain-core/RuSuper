@@ -466,6 +466,84 @@ mod tests {
     const EXHIROM_VALUE: u8 = 0x25;
     const INVALID_MAP_VALUE: u8 = 0xC0;
 
+    mod lorom_tests {
+        use super::*;
+        #[test]
+        fn test_lorom_checksum() {
+            assert_eq!(RomSize::LoRom, test_checksum_result(RomSize::LoRom).unwrap());
+        }
+
+        #[test]
+        fn test_fetch_optional_lorom() {
+            test_fetch_optional_header(RomSize::LoRom);
+        }
+
+        #[test]
+        fn test_fetch_exception_headers_lorom() {
+            test_fetch_exception_headers(RomSize::LoRom);
+        }
+    }
+
+    mod hirom_tests {
+        use super::*;
+
+        #[test]
+        fn test_hirom_checksum()  {
+            assert_eq!(RomSize::HiRom, test_checksum_result(RomSize::HiRom).unwrap());
+        }
+
+        #[test]
+        fn test_fetch_optional_hirom() {
+            test_fetch_optional_header(RomSize::HiRom);
+        }
+
+        #[test]
+        fn test_fetch_exception_headers_hirom() {
+            test_fetch_exception_headers(RomSize::HiRom);
+        }
+    }
+
+    mod exhirom_tests {
+        use super::*;
+
+        #[test]
+        fn test_exhirom_checksum() {
+            assert_eq!(RomSize::ExHiRom, test_checksum_result(RomSize::ExHiRom).unwrap());
+        }
+
+        #[test]
+        fn test_fetch_optional_exhirom() {
+            test_fetch_optional_header(RomSize::ExHiRom);
+        }
+
+        #[test]
+        fn test_fetch_exception_headers_exhirom() {
+            test_fetch_exception_headers(RomSize::ExHiRom);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    /// Test if a header with a good checksum, but a bad memory mapping value fails.
+    fn test_valid_checksum_with_bad_map() {
+        // Fill up a random array.
+        let mut test_header: Header = rand::thread_rng().gen();
+        let mut checksum: u16 = 0;
+        
+        // Test LoRom Detection.
+        test_header[HDR_MAP_MODE_INDEX] = INVALID_MAP_VALUE;
+        for byte in test_header.iter() {
+            checksum += *byte as u16;
+        }
+        let compare_value: u16 = HDR_TEST_VALUE - checksum;
+        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
+        test_header[HDR_CHECKSUM_INDEX+1] = checksum.to_le_bytes()[1];
+        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
+        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
+
+        test_checksum(checksum, &test_header).unwrap();
+    }
+
     /// Provided a target size, construct a header with a valid checksum for that value, and return the outcome.
     /// # Parameters:
     ///     - `expected_result`: Type of ROM to test.
@@ -501,21 +579,6 @@ mod tests {
     }
 
     #[test]
-    fn test_lorom_checksum() {
-        assert_eq!(RomSize::LoRom, test_checksum_result(RomSize::LoRom).unwrap());
-    }
-
-    #[test]
-    fn test_hirom_checksum()  {
-        assert_eq!(RomSize::HiRom, test_checksum_result(RomSize::HiRom).unwrap());
-    }
-
-    #[test]
-    fn test_exhirom_checksum() {
-        assert_eq!(RomSize::ExHiRom, test_checksum_result(RomSize::ExHiRom).unwrap());
-    }
-
-    #[test]
     #[should_panic]
     /// Test if a header with a bad checksum fails.
     fn test_invalid_checksum() {
@@ -523,34 +586,11 @@ mod tests {
         let mut test_header: Header = rand::thread_rng().gen();
         let mut checksum: u16 = 0;
         
-        // Test LoRom Detection.
         test_header[HDR_MAP_MODE_INDEX] = LOROM_VALUE;
         for byte in test_header.iter() {
             checksum += *byte as u16;
         }
         checksum += 1;
-        test_checksum(checksum, &test_header).unwrap();
-    }
-
-    #[test]
-    #[should_panic]
-    /// Test if a header with a good checksum, but a bad memory mapping value fails.
-    fn test_valid_checksum_with_bad_map() {
-        // Fill up a random array.
-        let mut test_header: Header = rand::thread_rng().gen();
-        let mut checksum: u16 = 0;
-        
-        // Test LoRom Detection.
-        test_header[HDR_MAP_MODE_INDEX] = INVALID_MAP_VALUE;
-        for byte in test_header.iter() {
-            checksum += *byte as u16;
-        }
-        let compare_value: u16 = HDR_TEST_VALUE - checksum;
-        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
-        test_header[HDR_CHECKSUM_INDEX+1] = checksum.to_le_bytes()[1];
-        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
-        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
-
         test_checksum(checksum, &test_header).unwrap();
     }
 
@@ -576,41 +616,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_fetch_optional_lorom() {
-        test_fetch_optional_header(RomSize::LoRom);
-    }
-
-    #[test]
-    fn test_fetch_optional_hirom() {
-        test_fetch_optional_header(RomSize::HiRom);
-    }
-
-    #[test]
-    fn test_fetch_optional_exhirom() {
-        test_fetch_optional_header(RomSize::ExHiRom);
-    }
-
-    #[test]
-    fn test_fetch_optional_coprocessors() {
-        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
-        let mut test_rom: Box<[u8; LO_ROM_BANK_SIZE_BYTES]> = vec![0; LO_ROM_BANK_SIZE_BYTES].into_boxed_slice().try_into().unwrap();
-        rand::thread_rng().fill_bytes(&mut *test_rom);
-        let mut data: RomData = RomData::new();
-        data.header[HDR_FIXED_VAL_INDEX] = HDR_SUBTYPE_PRESENT;
-
-        for i in 0x00..=0x05 {
-            test_rom[LO_ROM_EXT_HEADER_ADDR + OPT_SUB_CART_TYPE_INDEX] = i as u8;
-            match i {
-                0x00 => assert_eq!(CustomCoProcessor::SPC7110, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
-                0x01 => assert_eq!(CustomCoProcessor::ST010_11, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
-                0x02 => assert_eq!(CustomCoProcessor::ST018, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
-                0x03 => assert_eq!(CustomCoProcessor::CX4, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
-                _ => assert!(fetch_opt_header(&test_rom.to_vec(), &mut data).is_none())
-            }
-        } 
-    }
-
     fn test_fetch_exception_headers(expected_type: RomSize) {
         // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
         let mut test_rom: Box<[u8; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]> = vec![0; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES].into_boxed_slice().try_into().unwrap();
@@ -633,18 +638,22 @@ mod tests {
     }
 
     #[test]
-    fn test_fetch_exception_headers_lorom() {
-        test_fetch_exception_headers(RomSize::LoRom);
-    }
+    fn test_fetch_optional_coprocessors() {
+        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
+        let mut test_rom: Box<[u8; LO_ROM_BANK_SIZE_BYTES]> = vec![0; LO_ROM_BANK_SIZE_BYTES].into_boxed_slice().try_into().unwrap();
+        rand::thread_rng().fill_bytes(&mut *test_rom);
+        let mut data: RomData = RomData::new();
+        data.header[HDR_FIXED_VAL_INDEX] = HDR_SUBTYPE_PRESENT;
 
-    #[test]
-    fn test_fetch_exception_headers_hirom() {
-        test_fetch_exception_headers(RomSize::HiRom);
+        for i in 0x00..=0x05 {
+            test_rom[LO_ROM_EXT_HEADER_ADDR + OPT_SUB_CART_TYPE_INDEX] = i as u8;
+            match i {
+                0x00 => assert_eq!(CustomCoProcessor::SPC7110, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
+                0x01 => assert_eq!(CustomCoProcessor::ST010_11, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
+                0x02 => assert_eq!(CustomCoProcessor::ST018, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
+                0x03 => assert_eq!(CustomCoProcessor::CX4, fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()),
+                _ => assert!(fetch_opt_header(&test_rom.to_vec(), &mut data).is_none())
+            }
+        } 
     }
-
-    #[test]
-    fn test_fetch_exception_headers_exhirom() {
-        test_fetch_exception_headers(RomSize::ExHiRom);
-    }
-
 }
