@@ -5,7 +5,7 @@
 use core::fmt;
 use std::{fmt::Display, fs, io::Read, num::Wrapping, path::PathBuf};
 
-use crate::memory;
+use crate::memory::{self, compose_address};
 
 /********************************* ROM Info Constants **************************************************/
 
@@ -101,6 +101,7 @@ const HI_ROM_HEADER_ADDR:               usize = HI_ROM_EXC_VECTOR_ADDR - HDR_LEN
 const HI_ROM_EXT_HEADER_ADDR:           usize = HI_ROM_HEADER_ADDR - OPT_HEADER_LEN_BYTES;
 
 /// ExHiRom specific values
+const EX_HI_ROM_BANK_ADDR:              usize = HI_ROM_BANK_ADDR as usize;
 const EX_HI_ROM_EXC_VECTOR_ADDR:        usize = (4 * 1024 * 1024) + (HI_ROM_BANK_SIZE_BYTES - EV_LEN_BYTES); // Header starts at the end of the first bank after 4MiB.
 const EX_HI_ROM_HEADER_ADDR:            usize = EX_HI_ROM_EXC_VECTOR_ADDR - HDR_LEN_BYTES;
 const EX_HI_ROM_EXT_HEADER_ADDR:        usize = EX_HI_ROM_HEADER_ADDR - OPT_HEADER_LEN_BYTES;
@@ -125,6 +126,14 @@ pub enum RomSize {
     ExHiRom = EX_HI_ROM_HEADER_ADDR
 }
 const ROM_SIZE_NUM: usize = 3; // You cannot enumerate an enum in rust without an additional library
+
+/// Info pertaining to a rom bank size.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(usize)]
+pub enum BankSize {
+    Lo      = LO_ROM_BANK_SIZE_BYTES,
+    Hi      = HI_ROM_BANK_SIZE_BYTES
+}
 
 /// Info pertaining to the CPU clock speed the SNES runs at for this ROM.
 /// SlowRom = 2.68MHz
@@ -324,6 +333,124 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
 
 
     retval
+}
+
+/// Actually place the rom into `memory`.
+/// https://snes.nesdev.org/wiki/Memory_map
+/// 
+/// # Parameters:
+///     - `rom`:        Pointer to the ROM to read.
+///     - `mem_map`:    Size of the rom, used to where to place the ROM.
+///     - `mem_ptr`:    Pointer to memory to populate.
+/// # Returns:
+///     - `Ok()`:           If file wrote successfully,
+///     - `RomReadError`:   If an error ocurred in the process.
+fn write_rom_to_memory(rom: &Vec<u8>, mem_map: RomSize, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
+    let num_banks: usize;
+    let bank_size: BankSize;
+    let base_addr: usize;
+    match mem_map {
+        RomSize::ExHiRom => {
+            // Populate 0xC00000 - 0xFFFFFF, then wrap around and populate 0x3E8000 - 0x7DFFFF
+            // TODO: this is largely a special case and is not that pressing.
+            return write_ex_hi_rom(&rom, mem_ptr);
+        }
+        RomSize::HiRom => {
+            num_banks = rom.capacity() / HI_ROM_BANK_SIZE_BYTES;
+            bank_size = BankSize::Hi;
+            base_addr = compose_address(HI_ROM_BANK_ADDR as u8, 0);
+        }
+        RomSize::LoRom => {
+            // Populate 0x808000 - 0xFF8000, then mirror to 0x008000 - 0x7DFFFF
+            num_banks = rom.capacity() / LO_ROM_BANK_SIZE_BYTES;
+            bank_size = BankSize::Lo;
+            base_addr = compose_address(LO_ROM_BANK_ADDR as u8, ROM_BASE_ADDR);
+        }
+    }
+
+    let mut write_result: Result<(), RomReadError> = Ok(());
+    for bank in 0 .. num_banks {
+        let offset: usize = bank * bank_size as usize;
+        match mem_ptr.put_bank(bank_size, base_addr + offset, &rom[offset .. offset + bank_size as usize - 1]) {
+            Ok(_t) => write_result = Ok(()),
+            Err(e) => write_result = Err(RomReadError::new(e.to_string()))
+        }
+    }
+    return write_result;
+} 
+
+/// Write rom mirror to correct location.
+/// https://snes.nesdev.org/wiki/Memory_map
+/// 
+/// # Parameters:
+///     - `rom`:        Rom to read data from.
+///     - `mem_map`:    Type of rom to write mirror for.
+///     - `mem_ptr`:    Memory to populate.
+/// # Returns:
+///     - `Ok()`:           If written successfully,
+///     - `RomReadError`:   If an error was encountered in the process.
+fn write_rom_mirror(rom: &Vec<u8>, mem_map: RomSize, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
+    let bank_clusters: Vec<usize>;
+    let base_addrs: Vec<usize>;
+    match mem_map {
+        RomSize::ExHiRom => return write_ex_hi_rom_mirror(rom, mem_ptr),
+        RomSize::HiRom => {
+            // HiRom gets split across 2 areas of half-size banks.
+            bank_clusters = vec![rom.capacity() / HI_ROM_BANK_SIZE_BYTES, rom.capacity() / HI_ROM_BANK_SIZE_BYTES];
+            base_addrs = vec![memory::MEMORY_START, memory::compose_address(LO_ROM_BANK_ADDR, ROM_BASE_ADDR)]
+        }
+        RomSize::LoRom => {
+            bank_clusters = vec![rom.capacity() / LO_ROM_BANK_SIZE_BYTES];
+            base_addrs = vec![memory::MEMORY_START];
+        }
+    }
+
+    let mut write_result: Result<(), RomReadError> = Ok(());
+    
+    // Between each bank, the location in memory may move, but the rom remains contiguous,
+    //      So we need to keep track of where it is.
+    let mut rom_cluster_offset: usize = 0;
+    for cluster in 0..bank_clusters.len() {
+        for bank in 0..bank_clusters[cluster] {
+            // The ROM offset is 
+            let mem_offset: usize = bank * LO_ROM_BANK_SIZE_BYTES as usize;
+            let rom_offset: usize = (bank * LO_ROM_BANK_SIZE_BYTES as usize) + (rom_cluster_offset * LO_ROM_BANK_SIZE_BYTES as usize);
+            match mem_ptr.put_bank(BankSize::Lo, base_addrs[cluster] + mem_offset, &rom[rom_offset .. rom_offset + LO_ROM_BANK_SIZE_BYTES - 1]) {
+                Ok(_t) => write_result = Ok(()),
+                Err(e) => write_result = Err(RomReadError::new(e.to_string()))
+            }
+        }
+
+        rom_cluster_offset += bank_clusters[cluster];
+    }
+
+    return write_result;
+}
+
+/// Write an exhirom to memory.
+/// https://snes.nesdev.org/wiki/Memory_map#ExHiROM
+/// 
+/// # Parameters:
+///     - `rom`:        Rom to read data from.
+///     - `mem_ptr`:    Memory to modify.
+/// # Returns:
+///     - `Ok()`:           If written Ok.
+///     - `RomReadError`:   If process failed.
+fn write_ex_hi_rom(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
+    return Err(RomReadError::new("Unimplemented for ExHiRom".to_string()));
+}
+
+/// Write an exhirom mirror into memory.
+/// https://snes.nesdev.org/wiki/Memory_map#ExHiROM
+/// 
+/// # Parameters:
+///     - `rom`:        Rom to read data from.
+///     - `mem_ptr`:    Memory to modify.
+/// # Returns:
+///     - `Ok()`:           If written Ok.
+///     - `RomReadError`:   If process failed.
+fn write_ex_hi_rom_mirror(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
+    return Err(RomReadError::new("Unimplemented for ExHiRom".to_string()));
 }
 
 /// Find and grab the header from target rom if available.

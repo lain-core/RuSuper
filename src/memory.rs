@@ -1,10 +1,14 @@
 use core::fmt;
+
+use crate::romdata;
 /* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
 
 const MEMORY_SIZE: usize                = (0xFFFFFF) + 1;   // Total memory is addressable from 0x000000 - 0xFFFFFF
-pub const MEMORY_END:  usize            = 0x7FFFFF;         // Memory commonly ends at bank $7F https://ersanio.gitbook.io/assembly-for-the-snes/the-fundamentals/memory
-pub const MEMORY_BANK_COUNT: usize      =     0xFF;         // Number of addressable memory banks.
-pub const MEMORY_BANK_SIZE: usize       =   0xFFFF;         // Size of one memory bank.
+pub const MEMORY_START: usize           = 0x000000;
+pub const MEMORY_END:  usize            = 0xFFFFFF;         // Memory commonly ends at bank $7F https://ersanio.gitbook.io/assembly-for-the-snes/the-fundamentals/memory
+pub const MEMORY_BANK_COUNT: usize      = 0xFF;             // Number of addressable memory banks.
+pub const MEMORY_BANK_START: usize      = 0x0000;
+pub const MEMORY_BANK_SIZE: usize       = 0xFFFF;           // Size of one memory bank.
 pub const MEMORY_BANK_INDEX: u8         = 16;               // Bit index to shift a u8 by to obtain a bank address.
 
 type MemoryData = Box<[u8; MEMORY_SIZE]>;
@@ -61,7 +65,7 @@ impl Memory {
     /// # Returns:
     ///     - `Ok(value)`   If the argument was valid
     ///     - `Err(e)`      If the arument was invalid
-    pub fn get_byte(&self, address: usize) -> Result<u8, AddressOutOfBoundsError> {
+    pub fn get_byte(&self, address: usize) -> Result<u8, InvalidAddressError> {
         match address_is_valid(address) {
             Ok(_t) => {
                 Ok(self.memory[address])
@@ -79,11 +83,34 @@ impl Memory {
     ///     - `byte`:       LE-encoded byte to write.
     /// # Returns:
     ///     - `Ok(())`:                     If OK
-    ///     - `AddressOutOfBoundsError`:    If an invalid address was passed.
-    pub fn put_byte(&mut self, address: usize, byte: u8) -> Result<(), AddressOutOfBoundsError> {
+    ///     - `InvalidAddressError`:    If an invalid address was passed.
+    pub fn put_byte(&mut self, address: usize, byte: u8) -> Result<(), InvalidAddressError> {
         match address_is_valid(address) {
             Ok(_t) => {
                 self.memory[address] = byte;
+                Ok(())
+            }
+            Err(e) => {
+                Err(e)
+            }
+        }
+    }
+
+    /// Write an entire bank into memory.
+    /// # Parameters:
+    ///     - `self`
+    ///     - `banktype`:       The size of a rom, used to determine the bank length
+    ///     - `address`:        Start addres to write this bank from. 
+    ///     - `bankdata`:       Data to write to target bank.
+    /// # Returns
+    ///     - `Ok(())`:         If written OK.
+    ///     
+    pub fn put_bank(&mut self, banktype: romdata::BankSize, address: usize, bankdata: &[u8]) -> Result<(), InvalidAddressError> {
+        match address_is_valid(address + banktype as usize - 1) {
+            Ok(_t) => {
+                for offset in 0 .. banktype as usize - 1 {
+                    self.memory[address + offset] = bankdata[offset];
+                }
                 Ok(())
             }
             Err(e) => {
@@ -99,8 +126,8 @@ impl Memory {
     ///     - `word`:       Word to write.
     /// # Returns:
     ///     - `Ok(())`:                  if OK
-    ///     - `AddressOutOfBoundsError`: if an invalid address is passed in.
-    pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), AddressOutOfBoundsError> {
+    ///     - `InvalidAddressError`: if an invalid address is passed in.
+    pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), InvalidAddressError> {
         match address_is_valid(address + 1) {
             Ok(_t) => {
                 unsafe {
@@ -122,7 +149,7 @@ impl Memory {
     /// # Returns:
     ///     - `Ok(value)`   If the argument was valid
     ///     - `Err(e)`      If the arument was invalid
-    pub fn get_word(&self, address: usize) -> Result<u16, AddressOutOfBoundsError> {
+    pub fn get_word(&self, address: usize) -> Result<u16, InvalidAddressError> {
         match address_is_valid(address + 1) {
             Ok(_t) => {
                 // This operation should not actually be unsafe as the address of byte 1 is already validated.
@@ -139,13 +166,13 @@ impl Memory {
     }
 }
 
-/// Struct for an OutOfBoundsError on being passed a bad index.
+/// Struct for an Invalid Address or an index out of bounds.
 #[derive(Debug, Clone)]
-pub struct AddressOutOfBoundsError {
+pub struct InvalidAddressError {
     addr: usize
 }
 
-impl AddressOutOfBoundsError {
+impl InvalidAddressError {
     pub fn new(addr: usize) -> Self {
         Self {
             addr: addr
@@ -153,7 +180,7 @@ impl AddressOutOfBoundsError {
     }
 }
 
-impl fmt::Display for AddressOutOfBoundsError {
+impl fmt::Display for InvalidAddressError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Address index {:#08x} out of bounds", self.addr)
     }
@@ -176,15 +203,19 @@ pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
 ///     - `address`     An address to test.
 /// # Returns:
 ///     - `Ok(true)` for a valid address
-///     - `AddressOutOfBoundsError(address)` for an invalid address
-pub fn address_is_valid(address: usize) -> Result<(), AddressOutOfBoundsError> {
+///     - `InvalidAddressError(address)` for an invalid address
+pub fn address_is_valid(address: usize) -> Result<(), InvalidAddressError> {
     if address < MEMORY_SIZE {
         Ok(())
     }
     else {
         println!("Error");
-        Err(AddressOutOfBoundsError::new(address))
+        Err(InvalidAddressError::new(address))
     }
+}
+
+pub fn convert_bank_addr(bank_addr: u8) -> usize {
+    (bank_addr as usize) << MEMORY_BANK_INDEX
 }
 
 /***** Tests *****/
