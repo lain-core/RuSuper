@@ -117,7 +117,12 @@ const MAP_BASE_MASK: u8 = 0b00100000;
 /// Public constants
 pub const ROM_BASE_ADDR: u16 = 0x8000; // All LoRom banks, and mirrored banks of both Lo and HiRom fall under $XX8000. E.G.: Bank 0: $808000, Bank 1: $908000
 pub const TOTAL_HDR_BYTES: usize = OPT_HEADER_LEN_BYTES + HDR_LEN_BYTES + EV_LEN_BYTES;
+
 /********************************* ROM Info Enums & Struct Definitions *********************************/
+type Header = [u8; HDR_LEN_BYTES];
+type OptionalHeader = [u8; OPT_HEADER_LEN_BYTES];
+type ExceptionVectorTable = [u8; EV_LEN_BYTES];
+
 /// Info pertaining to the memory map and size of the ROM.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(usize)]
@@ -210,10 +215,6 @@ pub enum RomRegion {
     Brazil = 0x10,
     Australia = 0x11,
 }
-
-type Header = [u8; HDR_LEN_BYTES];
-type OptionalHeader = [u8; OPT_HEADER_LEN_BYTES];
-type ExceptionVectorTable = [u8; EV_LEN_BYTES];
 
 pub struct RomModeMapping {
     mem_map: RomSize,
@@ -316,13 +317,19 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
         let mut buf: Vec<u8> = vec![];
         let _read_result = match file.unwrap().read_to_end(&mut buf) {
             Ok(_) => {
-                retval = Ok(buf);
+                if buf.capacity() != 0 {
+                    retval = Ok(buf);
+                }
+                else {
+                    retval = Err(RomReadError::new("Rom was size 0".to_string()));
+                }
             }
             Err(e) => {
                 retval = Err(RomReadError::new(format!("Failed to read file: {}", e)));
             }
         };
-    } else {
+    }
+    else {
         retval = Err(RomReadError::new(format!(
             "Failed to open file at {}",
             &path.display()
@@ -345,9 +352,7 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
 ///     - `Ok()`:           If file wrote successfully,
 ///     - `RomReadError`:   If an error ocurred in the process.
 fn write_rom_to_memory(
-    rom: &Vec<u8>,
-    mem_map: RomSize,
-    mem_ptr: &mut memory::Memory,
+    rom: &Vec<u8>, mem_map: RomSize, mem_ptr: &mut memory::Memory,
 ) -> Result<(), RomReadError> {
     let num_banks: usize;
     let bank_size: BankSize;
@@ -397,9 +402,7 @@ fn write_rom_to_memory(
 ///     - `Ok()`:           If written successfully,
 ///     - `RomReadError`:   If an error was encountered in the process.
 fn write_rom_mirror(
-    rom: &Vec<u8>,
-    mem_map: RomSize,
-    mem_ptr: &mut memory::Memory,
+    rom: &Vec<u8>, mem_map: RomSize, mem_ptr: &mut memory::Memory,
 ) -> Result<(), RomReadError> {
     let bank_clusters: Vec<usize>;
     let base_addrs: Vec<usize>;
@@ -429,7 +432,6 @@ fn write_rom_mirror(
     let mut rom_cluster_offset: usize = 0;
     for cluster in 0..bank_clusters.len() {
         for bank in 0..bank_clusters[cluster] {
-            // The ROM offset is
             let mem_offset: usize = bank * LO_ROM_BANK_SIZE_BYTES as usize;
             let rom_offset: usize = (bank * LO_ROM_BANK_SIZE_BYTES as usize)
                 + (rom_cluster_offset * LO_ROM_BANK_SIZE_BYTES as usize);
@@ -487,7 +489,43 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 
     // Sum all bytes in the file. overflow is fine.
     let mut checksum: Wrapping<u16> = Wrapping(0);
-    let _ = rom.iter().map(|x| checksum += Wrapping(*x as u16));
+
+    // Determine if the rom is a power of two.
+    if (rom.capacity() & (rom.capacity() & rom.capacity() - 1)) == 0 {
+        // If so, add the value of all the bytes therein.
+        let _ = rom.iter().map(|x| checksum += Wrapping(*x as u16));
+    }
+    else {
+        // Otherwise, find the highest power of 2 available and then multiply the following data to equal that size.
+        // e.g.:
+        //      1.5 MiB rom will be 1 MiB + (0.5 * 2).
+        //      3.0 MiB rom will be 2 MiB + (1.0 * 2).
+        //      6.0 MiB rom will be 4 MiB + (2 * 2).
+
+        // Process:
+        //      1. Compute the highest containing power of two. E.G. 3.0 MiB Rom -> 2^21 (2MiB).
+        //      2. Find the index for that, and sum the former half.
+        //      3. Take a sum of the latter half, and then calculate the number of times to multiply it from the remainder. E.G. 3.0 MiB ROM, 1.0MiB latter half * 2.
+
+        let pwr_of_two_index =
+            (2 as usize).pow((rom.capacity() & !(rom.capacity() - 1)).try_into().unwrap()); // E.G. 3.0 MiB rom -> index 2,097,152
+        let rom_remainder = rom[pwr_of_two_index..].len(); // E.G. 3.0 MiB rom -> 1,048,576 (1MiB)
+        let number_of_iterations: f32 = pwr_of_two_index as f32 / rom_remainder as f32; // do a floating point division for the circumstance of needing like 1.5x multipliers
+
+        let _ = rom[0..pwr_of_two_index - 1]
+            .iter()
+            .map(|x| checksum += Wrapping(*x as u16));
+
+        // Wrap around, starting at the first index from the largest power of 2, and wrap whenever we reach the end.
+        let mut index = pwr_of_two_index;
+        for _iteration in 0..(rom_remainder as f32 * number_of_iterations) as usize {
+            if index >= rom.len() {
+                index = pwr_of_two_index;
+            }
+            checksum += Wrapping(rom[index] as u16);
+            index += 1;
+        }
+    }
 
     const ROM_OPTIONS: [RomSize; ROM_SIZE_NUM] = [RomSize::ExHiRom, RomSize::HiRom, RomSize::LoRom];
     for size in ROM_OPTIONS.iter() {
@@ -530,7 +568,8 @@ fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) -> Option<CustomCoProcess
         data.opt_is_present = true;
         data.opt_header
             .clone_from_slice(&rom[header_addr..header_addr + OPT_HEADER_LEN_BYTES]);
-    } else if data.header[HDR_FIXED_VAL_INDEX] == HDR_SUBTYPE_PRESENT {
+    }
+    else if data.header[HDR_FIXED_VAL_INDEX] == HDR_SUBTYPE_PRESENT {
         return match &rom[header_addr + OPT_SUB_CART_TYPE_INDEX] {
             0x00 => Some(CustomCoProcessor::SPC7110),
             0x01 => Some(CustomCoProcessor::ST010_11),
@@ -584,11 +623,14 @@ fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError
         let rom_map_mode: u8 = header[HDR_MAP_MODE_INDEX];
         if (rom_map_mode & MAP_EXHIROM_MASK) != 0 {
             retval = Ok(RomSize::ExHiRom);
-        } else if (rom_map_mode & MAP_HIROM_MASK) != 0 {
+        }
+        else if (rom_map_mode & MAP_HIROM_MASK) != 0 {
             retval = Ok(RomSize::HiRom);
-        } else if (rom_map_mode & MAP_BASE_MASK) != 0 {
+        }
+        else if (rom_map_mode & MAP_BASE_MASK) != 0 {
             retval = Ok(RomSize::LoRom);
-        } else {
+        }
+        else {
             retval = Err(RomReadError::new(
                 "ROM Checksum was valid, but mapping mode was unreadable".to_string(),
             ));
