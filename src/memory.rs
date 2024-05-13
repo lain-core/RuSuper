@@ -3,20 +3,20 @@ use core::fmt;
 use crate::romdata;
 /* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
 
-const MEMORY_SIZE: usize                = (0xFFFFFF) + 1;   // Total memory is addressable from 0x000000 - 0xFFFFFF
-pub const MEMORY_START: usize           = 0x000000;
-pub const MEMORY_END:  usize            = 0xFFFFFF;         // Memory commonly ends at bank $7F https://ersanio.gitbook.io/assembly-for-the-snes/the-fundamentals/memory
-pub const MEMORY_BANK_COUNT: usize      = 0xFF;             // Number of addressable memory banks.
-pub const MEMORY_BANK_START: usize      = 0x0000;
-pub const MEMORY_BANK_SIZE: usize       = 0xFFFF;           // Size of one memory bank.
-pub const MEMORY_BANK_INDEX: u8         = 16;               // Bit index to shift a u8 by to obtain a bank address.
+const MEMORY_SIZE: usize = (0xFFFFFF) + 1; // Total memory is addressable from 0x000000 - 0xFFFFFF
+pub const MEMORY_START: usize = 0x000000;
+pub const MEMORY_END: usize = 0xFFFFFF; // Memory commonly ends at bank $7F https://ersanio.gitbook.io/assembly-for-the-snes/the-fundamentals/memory
+pub const MEMORY_BANK_COUNT: usize = 0xFF; // Number of addressable memory banks.
+pub const MEMORY_BANK_START: usize = 0x0000;
+pub const MEMORY_BANK_SIZE: usize = 0xFFFF; // Size of one memory bank.
+pub const MEMORY_BANK_INDEX: u8 = 16; // Bit index to shift a u8 by to obtain a bank address.
 
 type MemoryData = Box<[u8; MEMORY_SIZE]>;
 
 /// Structure to represent memory.
 /// Really just a wrapper for an array; we are doing this to avoid implementing file-scope global state.
 pub struct Memory {
-    memory: MemoryData
+    memory: MemoryData,
 }
 
 impl Memory {
@@ -24,7 +24,7 @@ impl Memory {
     pub fn new() -> Self {
         Memory {
             // https://github.com/rust-lang/rust/issues/53827
-            memory: vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap()
+            memory: vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap(),
         }
     }
 
@@ -42,17 +42,13 @@ impl Memory {
             let byte_index = bank_index | row_index;
             let byte_value = &self.memory[byte_index];
 
-            if byte_index % 0x10 == 0
-            {
+            if byte_index % 0x10 == 0 {
                 // Stupid: The width specifier for hex formatting applies to the leading "0x" also; all widths must be +2.
                 print!("\n{:#06X}: [", byte_index);
                 print!(" {:#04X}, ", byte_value);
-            }
-            else if byte_index % 0x10 == 0x0F
-            {
+            } else if byte_index % 0x10 == 0x0F {
                 print!("{:#04X} ]", byte_value);
-            }
-            else {
+            } else {
                 print!("{:#04X}, ", byte_value);
             }
         }
@@ -67,12 +63,8 @@ impl Memory {
     ///     - `Err(e)`      If the arument was invalid
     pub fn get_byte(&self, address: usize) -> Result<u8, InvalidAddressError> {
         match address_is_valid(address) {
-            Ok(_t) => {
-                Ok(self.memory[address])
-            }
-            Err(e) => {
-                Err(e)
-            }
+            Ok(_t) => Ok(self.memory[address]),
+            Err(e) => Err(e),
         }
     }
 
@@ -90,9 +82,7 @@ impl Memory {
                 self.memory[address] = byte;
                 Ok(())
             }
-            Err(e) => {
-                Err(e)
-            }
+            Err(e) => Err(e),
         }
     }
 
@@ -100,22 +90,25 @@ impl Memory {
     /// # Parameters:
     ///     - `self`
     ///     - `banktype`:       The size of a rom, used to determine the bank length
-    ///     - `address`:        Start addres to write this bank from. 
+    ///     - `address`:        Start addres to write this bank from.
     ///     - `bankdata`:       Data to write to target bank.
     /// # Returns
     ///     - `Ok(())`:         If written OK.
     ///     
-    pub fn put_bank(&mut self, banktype: romdata::BankSize, address: usize, bankdata: &[u8]) -> Result<(), InvalidAddressError> {
+    pub fn put_bank(
+        &mut self,
+        banktype: romdata::BankSize,
+        address: usize,
+        bankdata: &[u8],
+    ) -> Result<(), InvalidAddressError> {
         match address_is_valid(address + banktype as usize - 1) {
             Ok(_t) => {
-                for offset in 0 .. banktype as usize - 1 {
+                for offset in 0..banktype as usize - 1 {
                     self.memory[address + offset] = bankdata[offset];
                 }
                 Ok(())
             }
-            Err(e) => {
-                Err(e)
-            }
+            Err(e) => Err(e),
         }
     }
 
@@ -131,18 +124,21 @@ impl Memory {
         match address_is_valid(address + 1) {
             Ok(_t) => {
                 unsafe {
-                    let word_ptr: *mut u16 = self.memory.as_mut_slice().as_mut_ptr().add(address).cast::<u16>();
+                    let word_ptr: *mut u16 = self
+                        .memory
+                        .as_mut_slice()
+                        .as_mut_ptr()
+                        .add(address)
+                        .cast::<u16>();
                     *word_ptr = word;
                 }
                 Ok(())
             }
-            Err(e) => {
-                Err(e)
-            }
+            Err(e) => Err(e),
         }
     }
 
-    /// Fetch a word from memory in 
+    /// Fetch a word from memory in
     /// # Parameters:
     ///     - `self`: Pointer to memory object which contains memory to read from.
     ///     - `address`: Address of byte to fetch.
@@ -154,29 +150,25 @@ impl Memory {
             Ok(_t) => {
                 // This operation should not actually be unsafe as the address of byte 1 is already validated.
                 unsafe {
-                    let word_ptr: *const u16 = self.memory.as_slice().as_ptr().add(address).cast::<u16>();
+                    let word_ptr: *const u16 =
+                        self.memory.as_slice().as_ptr().add(address).cast::<u16>();
                     Ok((*word_ptr).to_be())
                 }
             }
-            Err(e) => {
-                Err(e)
-            }
+            Err(e) => Err(e),
         }
-        
     }
 }
 
 /// Struct for an Invalid Address or an index out of bounds.
 #[derive(Debug, Clone)]
 pub struct InvalidAddressError {
-    addr: usize
+    addr: usize,
 }
 
 impl InvalidAddressError {
     pub fn new(addr: usize) -> Self {
-        Self {
-            addr: addr
-        }
+        Self { addr: addr }
     }
 }
 
@@ -207,8 +199,7 @@ pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
 pub fn address_is_valid(address: usize) -> Result<(), InvalidAddressError> {
     if address < MEMORY_SIZE {
         Ok(())
-    }
-    else {
+    } else {
         println!("Error");
         Err(InvalidAddressError::new(address))
     }
@@ -232,7 +223,8 @@ mod tests {
     /// # Returns:
     ///     - `random_data`:            Randomly generated list of u8s.
     fn fill_random(memory_under_test: &mut Memory) -> MemoryData {
-        let mut random_data: MemoryData = vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
+        let mut random_data: MemoryData =
+            vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
         rand::thread_rng().fill_bytes(&mut *random_data);
 
         for addr in 0..MEMORY_SIZE {
@@ -245,14 +237,15 @@ mod tests {
     #[test]
     fn test_put_byte() {
         let mut memory_under_test = Memory::new();
-        let mut random_data: Box<[u8; MEMORY_SIZE]> = vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
+        let mut random_data: Box<[u8; MEMORY_SIZE]> =
+            vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
         rand::thread_rng().fill_bytes(&mut *random_data);
 
-        for addr in 0 .. MEMORY_END {
+        for addr in 0..MEMORY_END {
             memory_under_test.put_byte(addr, random_data[addr]).unwrap();
         }
 
-        for addr in 0 .. MEMORY_END {
+        for addr in 0..MEMORY_END {
             assert_eq!(random_data[addr], memory_under_test.memory[addr]);
         }
     }
@@ -268,8 +261,8 @@ mod tests {
     fn test_get_byte() {
         let mut memory_under_test = Memory::new();
         let random_data: MemoryData = fill_random(&mut memory_under_test);
- 
-        for addr in 0 .. MEMORY_END {
+
+        for addr in 0..MEMORY_END {
             assert_eq!(random_data[addr], memory_under_test.get_byte(addr).unwrap());
         }
     }
@@ -284,17 +277,20 @@ mod tests {
     #[test]
     fn test_put_word() {
         let mut memory_under_test: Memory = Memory::new();
-        let mut random_data: Box<[u16; MEMORY_SIZE/2]> = vec![0; MEMORY_SIZE/2].into_boxed_slice().try_into().unwrap();
+        let mut random_data: Box<[u16; MEMORY_SIZE / 2]> = vec![0; MEMORY_SIZE / 2]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap();
 
         memory_under_test.put_word(0x000000, 0xAABB).unwrap();
         assert_eq!(memory_under_test.memory[0], 0xBB);
-        assert_eq!(memory_under_test.memory[1], 0xAA); 
+        assert_eq!(memory_under_test.memory[1], 0xAA);
 
         let mut rand_word: u16;
         for addr in 0..MEMORY_SIZE {
             if addr % 2 == 0 {
                 rand_word = rand::thread_rng().gen();
-                random_data[addr/2] = rand_word;
+                random_data[addr / 2] = rand_word;
                 memory_under_test.put_word(addr, rand_word).unwrap();
             }
         }
@@ -303,9 +299,9 @@ mod tests {
             if addr % 2 == 0 {
                 let test_word: u16 = u16::from_le_bytes([
                     memory_under_test.memory[addr],
-                    memory_under_test.memory[addr+1]
+                    memory_under_test.memory[addr + 1],
                 ]);
-                assert_eq!(random_data[addr/2], test_word);
+                assert_eq!(random_data[addr / 2], test_word);
             }
         }
     }
@@ -320,17 +316,20 @@ mod tests {
     #[test]
     fn test_get_word() {
         let mut memory_under_test: Memory = Memory::new();
-        let mut random_data: Box<[u16; MEMORY_SIZE/2]> = vec![0; MEMORY_SIZE/2].into_boxed_slice().try_into().unwrap();
+        let mut random_data: Box<[u16; MEMORY_SIZE / 2]> = vec![0; MEMORY_SIZE / 2]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap();
 
         memory_under_test.memory[0] = 0xAA;
-        memory_under_test.memory[1] = 0xBB; 
+        memory_under_test.memory[1] = 0xBB;
         assert_eq!(memory_under_test.get_word(0x000000).unwrap(), 0xAABB);
 
         let mut rand_word: u16;
         for addr in 0..MEMORY_SIZE {
             if addr % 2 == 0 {
                 rand_word = rand::thread_rng().gen();
-                random_data[addr/2] = rand_word;
+                random_data[addr / 2] = rand_word;
                 memory_under_test.put_word(addr, rand_word).unwrap();
             }
         }
@@ -339,9 +338,9 @@ mod tests {
             if addr % 2 == 0 {
                 let test_word: u16 = u16::from_le_bytes([
                     memory_under_test.memory[addr],
-                    memory_under_test.memory[addr+1]
+                    memory_under_test.memory[addr + 1],
                 ]);
-                assert_eq!(random_data[addr/2], test_word);
+                assert_eq!(random_data[addr / 2], test_word);
             }
         }
     }

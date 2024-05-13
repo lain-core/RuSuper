@@ -1,5 +1,5 @@
-use std::time;
 use crate::{memory, romdata};
+use std::time;
 
 // Instructions mod declarations
 
@@ -10,283 +10,1317 @@ mod branch;
 mod misc;
 
 /***** Instruction/Ops related constants *****/
-const NUM_INSTRUCTIONS:                         usize   = 256;              /// Number of instructions
-const INST_PARAM_OFFSET:                        u16     = 1;                /// Parameter for an offset is always instruction + 1.
+const NUM_INSTRUCTIONS: usize = 256;
+/// Number of instructions
+const INST_PARAM_OFFSET: u16 = 1;
+/// Parameter for an offset is always instruction + 1.
 
 /*  Number of bytes to increment the PC by for an instruction. */
-const PC_INCREMENT_NO_ARG:                      u16     = 1;                /// Instruction is only one byte long.
-const PC_INCREMENT_SHORT_ARG:                   u16     = 2;                /// Instruction takes an 8-bit parameter.
-const PC_INCREMENT_LONG_ARG:                    u16     = 3;                /// Instruction takes a  16-bit parameter. 
+const PC_INCREMENT_NO_ARG: u16 = 1;
+/// Instruction is only one byte long.
+const PC_INCREMENT_SHORT_ARG: u16 = 2;
+/// Instruction takes an 8-bit parameter.
+const PC_INCREMENT_LONG_ARG: u16 = 3;
+/// Instruction takes a  16-bit parameter.
 
-/// Map of the cpu opcodes. 
+/// Map of the cpu opcodes.
 /// Would prefer this to be a hashmap, but rust cannot generate a HashMap::From() as const, and a global cannot be declared using `let`.
 const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x00 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x01 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x02 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x03 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x04 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x05 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x06 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x07 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x08 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x09 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x0A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x0B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x0C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x0D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x0E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x0F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x10 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x11 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x12 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x13 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x14 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x15 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x16 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x17 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x18 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x19 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x1A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x1B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x1C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x1D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x1E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x1F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x20 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x21 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x22 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x23 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x24 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x25 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x26 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x27 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x28 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x29 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x2A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x2B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x2C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x2D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x2E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x2F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x30 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x31 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x32 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x33 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x34 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x35 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x36 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x37 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x38 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x39 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x3A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x3B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x3C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x3D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x3E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x3F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x40 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x41 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x42 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x43 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x44 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x45 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x46 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x47 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x48 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x49 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x4A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x4B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x4C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x4D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x4E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x4F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x50 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x51 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x52 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x53 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x54 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x55 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x56 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x57 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x58 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x59 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x5A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x5B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x5C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x5D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x5E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x5F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x60 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x61 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x62 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x63 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x64 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x65 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x66 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x67 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x68 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x69 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x6A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x6B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x6C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x6D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x6E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x6F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x70 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x71 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x72 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x73 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x74 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x75 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x76 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x77 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x78 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x79 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x7A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x7B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x7C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x7D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x7E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x7F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x80 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x81 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x82 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x83 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x84 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x85 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x86 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x87 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x88 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x89 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x8A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x8B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x8C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x8D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x8E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x8F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x90 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x91 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x92 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x93 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x94 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x95 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x96 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x97 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x98 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x99 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x9A */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x9B */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x9C */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x9D */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x9E */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0x9F */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA0 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA1 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA2 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA3 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA4 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA5 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA6 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA7 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA8 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xA9 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xAA */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xAB */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xAC */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xAD */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xAE */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xAF */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB0 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB1 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB2 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB3 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB4 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB5 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB6 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB7 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB8 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xB9 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xBA */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xBB */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xBC */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xBD */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xBE */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xBF */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC0 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC1 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC2 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC3 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC4 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC5 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC6 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC7 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC8 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xC9 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xCA */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xCB */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xCC */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xCD */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xCE */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xCF */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD0 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD1 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD2 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD3 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD4 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD5 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD6 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD7 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD8 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xD9 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xDA */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xDB STP */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xDC */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xDD */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xDE */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xDF */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE0 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE1 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE2 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE3 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE4 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE5 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE6 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE7 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE8 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xE9 */
-    CpuInstruction{opcode: CpuOpcode::NOP, width: CpuParamWidth::NO, function: misc::nop}, /* 0xEA NOP */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xEB */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xEC */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xED */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xEE */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xEF */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF0 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF1 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF2 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF3 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF4 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF5 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF6 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF7 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF8 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xF9 */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xFA */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xFB */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xFC */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xFD */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xFE */
-    CpuInstruction{opcode: CpuOpcode::STP, width: CpuParamWidth::NO, function: misc::stp}, /* 0xFF */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x00 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x01 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x02 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x03 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x04 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x05 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x06 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x07 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x08 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x09 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x0A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x0B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x0C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x0D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x0E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x0F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x10 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x11 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x12 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x13 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x14 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x15 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x16 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x17 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x18 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x19 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x1A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x1B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x1C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x1D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x1E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x1F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x20 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x21 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x22 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x23 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x24 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x25 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x26 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x27 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x28 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x29 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x2A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x2B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x2C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x2D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x2E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x2F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x30 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x31 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x32 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x33 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x34 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x35 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x36 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x37 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x38 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x39 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x3A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x3B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x3C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x3D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x3E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x3F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x40 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x41 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x42 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x43 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x44 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x45 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x46 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x47 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x48 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x49 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x4A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x4B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x4C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x4D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x4E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x4F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x50 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x51 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x52 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x53 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x54 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x55 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x56 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x57 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x58 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x59 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x5A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x5B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x5C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x5D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x5E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x5F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x60 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x61 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x62 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x63 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x64 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x65 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x66 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x67 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x68 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x69 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x6A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x6B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x6C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x6D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x6E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x6F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x70 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x71 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x72 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x73 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x74 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x75 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x76 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x77 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x78 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x79 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x7A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x7B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x7C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x7D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x7E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x7F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x80 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x81 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x82 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x83 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x84 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x85 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x86 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x87 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x88 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x89 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x8A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x8B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x8C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x8D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x8E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x8F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x90 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x91 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x92 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x93 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x94 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x95 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x96 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x97 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x98 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x99 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x9A */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x9B */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x9C */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x9D */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x9E */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0x9F */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA0 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA1 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA2 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA3 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA4 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA5 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA6 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA7 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA8 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xA9 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xAA */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xAB */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xAC */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xAD */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xAE */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xAF */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB0 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB1 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB2 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB3 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB4 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB5 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB6 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB7 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB8 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xB9 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xBA */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xBB */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xBC */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xBD */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xBE */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xBF */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC0 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC1 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC2 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC3 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC4 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC5 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC6 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC7 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC8 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xC9 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xCA */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xCB */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xCC */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xCD */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xCE */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xCF */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD0 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD1 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD2 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD3 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD4 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD5 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD6 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD7 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD8 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xD9 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xDA */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xDB STP */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xDC */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xDD */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xDE */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xDF */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE0 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE1 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE2 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE3 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE4 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE5 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE6 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE7 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE8 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xE9 */
+    CpuInstruction {
+        opcode: CpuOpcode::NOP,
+        width: CpuParamWidth::NO,
+        function: misc::nop,
+    }, /* 0xEA NOP */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xEB */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xEC */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xED */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xEE */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xEF */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF0 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF1 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF2 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF3 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF4 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF5 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF6 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF7 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF8 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xF9 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xFA */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xFB */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xFC */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xFD */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xFE */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        width: CpuParamWidth::NO,
+        function: misc::stp,
+    }, /* 0xFF */
 ];
 
 /***** Timing related constants *****/
 // The SNES master clock runs at about 21.477MHz NTSC (theoretically 1.89e9/88 Hz).
 // https://wiki.superfamicom.org/timing
-const CLOCK_CYCLE_TICK_NS:                      f64     = 46.5614378172;    /// Approximation of 1x 21.477MHz pulse in nanoseconds 
-const CYCLES_PER_SCANLINE:                      usize   = 1364;             /// Number of cycles between draw of scanline.
-const NON_INTERLACE_MODE_ALTERNATE_CYCLES_PER:  usize   = 1360;             /// Every other frame in non-interlaced, 4 less cycles per frame. This is "extra credit".
-const SCANLINES_PER_FRAME:                      usize   = 262;              /// Number of scanlines per 1 frame (e.g. 60Hz)
-const CYCLES_PER_FRAME:                         usize   = SCANLINES_PER_FRAME * CYCLES_PER_SCANLINE;    /// Number of cycles per 1 frame (e.g. 60Hz)
+const CLOCK_CYCLE_TICK_NS: f64 = 46.5614378172;
+/// Approximation of 1x 21.477MHz pulse in nanoseconds
+const CYCLES_PER_SCANLINE: usize = 1364;
+/// Number of cycles between draw of scanline.
+const NON_INTERLACE_MODE_ALTERNATE_CYCLES_PER: usize = 1360;
+/// Every other frame in non-interlaced, 4 less cycles per frame. This is "extra credit".
+const SCANLINES_PER_FRAME: usize = 262;
+/// Number of scanlines per 1 frame (e.g. 60Hz)
+const CYCLES_PER_FRAME: usize = SCANLINES_PER_FRAME * CYCLES_PER_SCANLINE;
+/// Number of cycles per 1 frame (e.g. 60Hz)
 
 /***** Implementation of enums and structures for CPU *****/
 
@@ -294,7 +1328,7 @@ const CYCLES_PER_FRAME:                         usize   = SCANLINES_PER_FRAME * 
 struct VirtualMachine {
     cpu: CpuState,
     memory: memory::Memory,
-    romdata: romdata::RomData
+    romdata: romdata::RomData,
 }
 
 impl VirtualMachine {
@@ -302,7 +1336,7 @@ impl VirtualMachine {
         Self {
             cpu: CpuState::new(),
             memory: memory::Memory::new(),
-            romdata: romdata::RomData::new()
+            romdata: romdata::RomData::new(),
         }
     }
 }
@@ -316,16 +1350,16 @@ pub enum CpuOpcode {
     // Many More
 }
 
-/// Defines width of operation. 
-/// - NO    = Bare opcode (e.g. NOP). 
-/// - SHORT = 8bit param. 
+/// Defines width of operation.
+/// - NO    = Bare opcode (e.g. NOP).
+/// - SHORT = 8bit param.
 /// - LONG  = 16bit param.
 #[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 enum CpuParamWidth {
-    NO      = PC_INCREMENT_NO_ARG,
-    SHORT   = PC_INCREMENT_SHORT_ARG,
-    LONG    = PC_INCREMENT_LONG_ARG
+    NO = PC_INCREMENT_NO_ARG,
+    SHORT = PC_INCREMENT_SHORT_ARG,
+    LONG = PC_INCREMENT_LONG_ARG,
 }
 
 /// A conglomerate wrapper of the prior enums.
@@ -336,7 +1370,7 @@ enum CpuParamWidth {
 struct CpuInstruction {
     opcode: CpuOpcode,
     width: CpuParamWidth,
-    function: fn(&mut CpuState, &mut memory::Memory, u16) -> bool
+    function: fn(&mut CpuState, &mut memory::Memory, u16) -> bool,
 }
 
 /// Virtualized representation of the CPU internally.
@@ -346,10 +1380,10 @@ pub struct CpuState {
     pc: u16,                // Program Counter
     sp: u16,                // Stack Pointer
     flags: u8,              // Flags TODO: this should be a union of bits
-    direct_page: u16,       // Direct page addressing offset  
+    direct_page: u16,       // Direct page addressing offset
     data_bank: u8,          // Reference to current data bank addr
     prog_bank: u8,          // Reference to current bank of instr
-    pub cycles_to_pend: u8  // Number of cycles to pend before running next operation. 
+    pub cycles_to_pend: u8, // Number of cycles to pend before running next operation.
 }
 
 /* Associated Functions */
@@ -364,7 +1398,7 @@ impl CpuState {
             direct_page: 0x0000,
             data_bank: 0x00,
             prog_bank: 0x00,
-            cycles_to_pend: 0x00
+            cycles_to_pend: 0x00,
         }
     }
 
@@ -386,7 +1420,7 @@ impl CpuState {
     ///     - `memory`: Pointer to memory object to read data from.
     fn fetch_and_decode(&self, p_mem: &memory::Memory) -> CpuInstruction {
         let address = memory::compose_address(self.prog_bank, self.pc);
-        INSTRUCTION_MAP[ p_mem.get_byte(address).unwrap() as usize ]
+        INSTRUCTION_MAP[p_mem.get_byte(address).unwrap() as usize]
     }
 
     /// Execute an instruction.
@@ -399,14 +1433,17 @@ impl CpuState {
     ///     - false     If a BRK or STP has been reached.
     fn execute(&mut self, inst: CpuInstruction, mut p_mem: &mut memory::Memory) -> bool {
         let continue_run: bool;
-        let parameter_location: usize = memory::compose_address(self.prog_bank, self.pc + INST_PARAM_OFFSET);
-        let parameter_value: u16;    // Calculated parameter value, if applicable.
-        let pc_addr_increment: u16 = inst.width as u16;  // Number of bytes to increment the PC by after this operation.
-        
+        let parameter_location: usize =
+            memory::compose_address(self.prog_bank, self.pc + INST_PARAM_OFFSET);
+        let parameter_value: u16; // Calculated parameter value, if applicable.
+        let pc_addr_increment: u16 = inst.width as u16; // Number of bytes to increment the PC by after this operation.
+
         match inst.width {
-            CpuParamWidth::NO       => { parameter_value = 0 },
-            CpuParamWidth::SHORT    => { parameter_value = p_mem.get_byte(parameter_location).unwrap() as u16 },
-            CpuParamWidth::LONG     => { parameter_value = p_mem.get_word(parameter_location).unwrap() }
+            CpuParamWidth::NO => parameter_value = 0,
+            CpuParamWidth::SHORT => {
+                parameter_value = p_mem.get_byte(parameter_location).unwrap() as u16
+            }
+            CpuParamWidth::LONG => parameter_value = p_mem.get_word(parameter_location).unwrap(),
         }
 
         // Call the function to execute.
@@ -433,7 +1470,7 @@ pub fn run(path: std::path::PathBuf) {
     let mut vm = VirtualMachine::new();
     vm.romdata = romdata::load_rom(path, &mut vm.memory).unwrap();
 
-    // Debugger loop which parses user inputs. 
+    // Debugger loop which parses user inputs.
     let mut vm_running = true;
 
     // Track number of cycles to do calculations on. Doesn't matter if this rolls over.
@@ -446,30 +1483,29 @@ pub fn run(path: std::path::PathBuf) {
         // https://wiki.superfamicom.org/timing
 
         if vm_running {
-            
             // Draw a scanline.
-            if cycles_elapsed % std::num::Wrapping(CYCLES_PER_SCANLINE as usize) == std::num::Wrapping(0) {
+            if cycles_elapsed % std::num::Wrapping(CYCLES_PER_SCANLINE as usize)
+                == std::num::Wrapping(0)
+            {
                 // TODO: PPU something
             }
 
             // If there is no need to pend on another cycle, then go ahead and run an operation.
             if vm.cpu.cycles_to_pend == 0 {
                 vm_running = vm.cpu.step(&mut vm.memory);
-                println!("Next instruction stalled by {} cycles", vm.cpu.cycles_to_pend);
+                println!(
+                    "Next instruction stalled by {} cycles",
+                    vm.cpu.cycles_to_pend
+                );
             }
             // Otherwise, punt on operating for however long we need to.
             else if vm.cpu.cycles_to_pend > 0 {
                 // We have to round because rust does not implement fractional nanoseconds (how unbelievable!!)
-                std::thread::sleep( time::Duration::from_nanos(CLOCK_CYCLE_TICK_NS as u64) );
+                std::thread::sleep(time::Duration::from_nanos(CLOCK_CYCLE_TICK_NS as u64));
                 cycles_elapsed += 1;
                 vm.cpu.cycles_to_pend -= 1;
             }
         }
-
-
-
-
-
     }
 }
 
