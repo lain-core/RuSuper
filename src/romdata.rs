@@ -2,7 +2,7 @@
 // There are a lot of currently unused const values in this file, but they are important to structural understanding
 //  and may become more useful in the future. This is disabled while still implementing functions.
 
-use core::fmt;
+use core::{fmt, num};
 use std::{fmt::Display, fs, io::Read, num::Wrapping, path::PathBuf};
 
 use crate::memory::{self, compose_address};
@@ -47,8 +47,8 @@ const HDR_RAM_SIZE_INDEX: usize = HDR_ROM_SIZE_INDEX + HDR_ROM_SIZE_LEN;
 const HDR_DEST_CODE_INDEX: usize = HDR_RAM_SIZE_INDEX + HDR_RAM_SIZE_LEN;
 const HDR_FIXED_VAL_INDEX: usize = HDR_DEST_CODE_INDEX + HDR_DEST_CODE_LEN;
 const HDR_MASK_ROM_VER_INDEX: usize = HDR_FIXED_VAL_INDEX + HDR_FIXED_VAL_LEN;
-const HDR_COMPLEMENT_CHECK_INDEX: usize = HDR_MASK_ROM_VER_INDEX + HDR_MASK_ROM_VER_LEN;
-const HDR_CHECKSUM_INDEX: usize = HDR_COMPLEMENT_CHECK_INDEX + HDR_COMPLEMENT_CHECK_LEN;
+const HDR_CHECKSUM_INDEX: usize = HDR_MASK_ROM_VER_INDEX + HDR_MASK_ROM_VER_LEN;
+const HDR_COMPLEMENT_CHECK_INDEX: usize = HDR_CHECKSUM_INDEX + HDR_COMPLEMENT_CHECK_LEN;
 
 const HDR_TEST_VALUE: u16 = 0xFFFF; // A test checksum + the complement value should equal this value.
 const HDR_OPT_PRESENT: u8 = 0x33; // Value in HDR_FIXED_VAL_INDEX if the optional header is present.
@@ -490,8 +490,7 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
     // Sum all bytes in the file. overflow is fine.
     let mut checksum: Wrapping<u16> = Wrapping(0);
 
-    // Determine if the rom is a power of two.
-    if (rom.capacity() & (rom.capacity() & rom.capacity() - 1)) == 0 {
+    if rom.capacity().is_power_of_two() {
         // If so, add the value of all the bytes therein.
         let _ = rom.iter().map(|x| checksum += Wrapping(*x as u16));
     }
@@ -505,16 +504,14 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
         // Process:
         //      1. Compute the highest containing power of two. E.G. 3.0 MiB Rom -> 2^21 (2MiB).
         //      2. Find the index for that, and sum the former half.
-        //      3. Take a sum of the latter half, and then calculate the number of times to multiply it from the remainder. E.G. 3.0 MiB ROM, 1.0MiB latter half * 2.
-
-        let pwr_of_two_index =
-            (2 as usize).pow((rom.capacity() & !(rom.capacity() - 1)).try_into().unwrap()); // E.G. 3.0 MiB rom -> index 2,097,152
+        //      3. Take a sum of the latter half, and then calculate the number of times to multiply it from the remainder. E.G. 3.0 MiB ROM, 1.0MiB latter half * 2.;
+        let pwr_of_two_index = rom.capacity().next_power_of_two() / 2;
         let rom_remainder = rom[pwr_of_two_index..].len(); // E.G. 3.0 MiB rom -> 1,048,576 (1MiB)
         let number_of_iterations: f32 = pwr_of_two_index as f32 / rom_remainder as f32; // do a floating point division for the circumstance of needing like 1.5x multipliers
 
-        let _ = rom[0..pwr_of_two_index - 1]
-            .iter()
-            .map(|x| checksum += Wrapping(*x as u16));
+        for byte in &rom[0..pwr_of_two_index] {
+            checksum += Wrapping((*byte) as u16);
+        }
 
         // Wrap around, starting at the first index from the largest power of 2, and wrap whenever we reach the end.
         let mut index = pwr_of_two_index;
@@ -522,27 +519,35 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
             if index >= rom.len() {
                 index = pwr_of_two_index;
             }
-            checksum += Wrapping(rom[index] as u16);
+            checksum += Wrapping((rom[index]) as u16);
             index += 1;
         }
     }
 
     const ROM_OPTIONS: [RomSize; ROM_SIZE_NUM] = [RomSize::ExHiRom, RomSize::HiRom, RomSize::LoRom];
     for size in ROM_OPTIONS.iter() {
-        test_header.clone_from_slice(&rom[*size as usize..*size as usize + HDR_LEN_BYTES]);
+        if rom.capacity() > *size as usize {
+            println!(
+                "{:?}: Slicing header from {:#08X} to {:#08X}",
+                size,
+                (*size as usize),
+                (*size as usize + HDR_LEN_BYTES)
+            );
+            test_header.clone_from_slice(&rom[*size as usize..*size as usize + HDR_LEN_BYTES]);
 
-        match test_checksum(checksum.0, &test_header) {
-            Ok(tested_size) => {
-                return Ok(RomData {
-                    header: test_header,
-                    opt_header: [0; OPT_HEADER_LEN_BYTES],
-                    exception_vectors: [0; EV_LEN_BYTES],
-                    opt_is_present: false,
-                    mem_map: tested_size,
-                });
-            }
-            Err(e) => {
-                retval = Err(e);
+            match test_checksum(checksum.0, &test_header) {
+                Ok(tested_size) => {
+                    return Ok(RomData {
+                        header: test_header,
+                        opt_header: [0; OPT_HEADER_LEN_BYTES],
+                        exception_vectors: [0; EV_LEN_BYTES],
+                        opt_is_present: false,
+                        mem_map: tested_size,
+                    });
+                }
+                Err(e) => {
+                    retval = Err(e);
+                }
             }
         }
     }
@@ -874,5 +879,60 @@ mod tests {
                 _ => assert!(fetch_opt_header(&test_rom.to_vec(), &mut data).is_none()),
             }
         }
+    }
+
+    fn fetch_header_for_misaligned_rom(mem_map: RomSize, size: usize) {
+        let mut test_rom: Vec<u8> = vec![0; size].into_boxed_slice().try_into().unwrap();
+        rand::thread_rng().fill_bytes(&mut *test_rom);
+
+        let hdr_byte_index: usize = mem_map as usize;
+        match mem_map {
+            RomSize::LoRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = LOROM_VALUE,
+            RomSize::HiRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = HIROM_VALUE,
+            RomSize::ExHiRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = EXHIROM_VALUE,
+        }
+
+        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX] = 0;
+        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX + 1] = 0;
+        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX] = 0;
+        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX + 1] = 0;
+
+        // Calculate the checksum and complement value.
+        let pwr_of_two_index = size.next_power_of_two() / 2;
+        let mut checksum: Wrapping<u16> = Wrapping(0);
+        for byte in &test_rom[0..pwr_of_two_index] {
+            checksum += Wrapping((*byte) as u16);
+        }
+
+        let remainder = test_rom.capacity() - pwr_of_two_index;
+        let iterations = (test_rom.capacity() - remainder) / remainder;
+
+        for _iteration in 0..iterations {
+            for byte in &test_rom[pwr_of_two_index..] {
+                checksum += Wrapping((*byte) as u16);
+            }
+        }
+        checksum += 0x01FE; // Also count the bytes that will go in the rom as a checksum
+
+        let compare_value: u16 = HDR_TEST_VALUE - checksum.0;
+        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
+        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
+        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX] = checksum.0.to_le_bytes()[0];
+        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX + 1] = checksum.0.to_le_bytes()[1];
+
+        assert_eq!(mem_map, fetch_header(&test_rom.to_vec()).unwrap().mem_map);
+    }
+
+    #[test]
+    fn test_non_power_of_2_roms() {
+        const HALF_STEP: usize = 512 * 1024;
+
+        // Test all roms which would be unevenly stacked.
+        fetch_header_for_misaligned_rom(RomSize::LoRom, HALF_STEP * 3); // 1.5 MiB (1MiB + 512KiB)
+                                                                        // 2.0 MiB IS a power of 2.
+        fetch_header_for_misaligned_rom(RomSize::LoRom, HALF_STEP * 5); // 2.5 MiB (2MiB + 512KiB)
+        fetch_header_for_misaligned_rom(RomSize::LoRom, HALF_STEP * 6); // 3.0 MiB (2MiB + 1MiB)
+                                                                        // 3.5 MiB is not a valid configuration.
+                                                                        // TODO: The ExHiROM variants are as-yet untested, because the ExHiRom functionality is not present.
     }
 }
