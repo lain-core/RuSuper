@@ -1,11 +1,19 @@
+use std::collections::HashMap;
+use std::io;
+use std::io::Write;
 use std::time;
 
 use crate::cpu;
 use crate::memory;
 use crate::romdata;
 
+mod breakpoints;
+mod misc;
+
 /*******
  * Brainstorming: command ideas:
+ *  - h             help
+ *  - help          help
  *  - tag $XXXXXX   Assign variable name to address 0xXXXXXX
  *  - b             Set breakpoint at current PC
  *      - b +N          Set breakpoint at memory address PC + N
@@ -52,6 +60,27 @@ const CYCLES_PER_SCANLINE: usize = 1364;
 /// Every other frame in non-interlaced, 4 less cycles per frame. This is "extra credit".
 const NON_INTERLACE_MODE_ALTERNATE_CYCLES_PER: usize = 1360;
 
+/// Struct to track the operation of the debugger.
+struct DebuggerState {
+    is_running: bool,
+    steps_to_run: usize,
+    breakpoints: Vec<usize>,
+    watched_vars: Vec<usize>,
+    tags: HashMap<String, usize>,
+}
+
+impl DebuggerState {
+    pub fn new() -> Self {
+        Self {
+            is_running: false,
+            steps_to_run: 0,
+            watched_vars: Vec::new(),
+            breakpoints: Vec::new(),
+            tags: HashMap::new(),
+        }
+    }
+}
+
 /// Struct to manage count of clocks.
 struct ClockState {
     clock_speed: f64,
@@ -78,6 +107,7 @@ struct VirtualMachine {
     memory: memory::Memory,
     romdata: romdata::RomData,
     clocks: ClockState,
+    debugger: DebuggerState,
 }
 
 impl VirtualMachine {
@@ -87,15 +117,50 @@ impl VirtualMachine {
             memory: memory::Memory::new(),
             romdata: romdata::RomData::new(),
             clocks: ClockState::new(),
+            debugger: DebuggerState::new(),
         }
     }
 }
+
+#[derive(Hash, PartialEq, Eq)]
+enum DebugCommandTypes {
+    Help,
+    Break,
+    Continue,
+    Step,
+    Tag,
+    Dump,
+    Print,
+    Watch,
+    Exit,
+    Invalid,
+}
+
+impl From<&str> for DebugCommandTypes {
+    fn from(value: &str) -> Self {
+        match value {
+            "b" => Self::Break,
+            "break" => Self::Break,
+            "h" => Self::Help,
+            "help" => Self::Help,
+            "c" => Self::Continue,
+            "r" => Self::Continue,
+            "q" => Self::Exit,
+            "quit" => Self::Exit,
+            "exit" => Self::Exit,
+            _ => Self::Invalid,
+        }
+    }
+}
+
+type DebugFn = Box<dyn Fn(Vec<&str>, &mut VirtualMachine)>;
 
 /// Run the system.
 /// Also manages timings and delegates to other legs of the system. Might be worth breaking up in the future.
 /// # Parameters
 ///     - `vm`  Object holding CPU state and Memory for this instance.
 pub fn run(path: std::path::PathBuf, args: Vec<String>) {
+    print!("Opening file {}... ", &path.display());
     let mut vm = VirtualMachine::new();
     // TODO: find a better way to do this
     if args.capacity() > 2 {
@@ -115,19 +180,26 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
         romdata::RomClkSpeed::SlowRom => SLOWROM_CLOCK_CYCLE_TICK_SEC,
         romdata::RomClkSpeed::FastRom => FASTROM_CLOCK_CYCLE_TICK_SEC,
     };
-    let mut vm_running = true;
-
+    print!("Success.\n>> ");
+    io::stdout().flush().unwrap();
     loop {
         // TODO: Should CPU be threaded or should this file be the king?
         // TODO: Spin off thread for SPC700(?)
         // TODO: Spin off thread for PPU(?)
-        // check_dbg_input();
-        if vm_running {
-            vm_running = step_cpu(&mut vm);
+        if vm.debugger.is_running {
+            vm.debugger.is_running = step_cpu(&mut vm);
+        }
+        else {
+            check_dbg_input(&mut vm);
         }
     }
 }
 
+/// Request the CPU to step one operation, and then pend for the number of cycles it (should) take for those operations to run.
+/// # Parameters:
+///     - `vm`:         Pointer to VM containing state for the emulator.
+/// # Returns:
+///     - `vm_running`: Whether the VM is running or has stopped.
 fn step_cpu(vm: &mut VirtualMachine) -> bool {
     let mut vm_running = true;
     // If there is no need to pend on another cycle, then go ahead and run an operation.
@@ -146,4 +218,31 @@ fn step_cpu(vm: &mut VirtualMachine) -> bool {
         vm.cpu.cycles_to_pend -= 1;
     }
     return vm_running;
+}
+
+fn check_dbg_input(vm: &mut VirtualMachine) {
+    let debug_cmd_map: HashMap<DebugCommandTypes, DebugFn> = HashMap::from([
+        (DebugCommandTypes::Help, Box::new(misc::dbg_help) as DebugFn),
+        (
+            DebugCommandTypes::Continue,
+            Box::new(misc::dbg_continue) as DebugFn,
+        ),
+        (
+            DebugCommandTypes::Invalid,
+            Box::new(misc::dbg_invalid) as DebugFn,
+        ),
+        (DebugCommandTypes::Exit, Box::new(misc::dbg_exit) as DebugFn),
+    ]);
+
+    let mut input_text = String::new();
+    io::stdin()
+        .read_line(&mut input_text)
+        .expect("Failed to read stdin");
+    let trimmed: Vec<&str> = input_text.trim().split_whitespace().collect();
+    if (trimmed.capacity() > 0) {
+        let command: DebugCommandTypes = DebugCommandTypes::from(trimmed[0]);
+        debug_cmd_map[&command](trimmed[1..].to_vec(), vm);
+    }
+    print!(">> ");
+    io::stdout().flush().unwrap();
 }

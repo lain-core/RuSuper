@@ -381,7 +381,6 @@ pub fn load_rom(
     let mut data = RomData::new();
 
     if bypass_tests {
-        println!("Bypassing tests and writing rom to memory...");
         for offset in 0..rom.capacity() {
             memory.put_byte(0x808000 + offset, rom[offset]);
         }
