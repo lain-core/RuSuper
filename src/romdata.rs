@@ -1,8 +1,8 @@
-// #![allow(unused)]
+#![allow(unused)]
 // There are a lot of currently unused const values in this file, but they are important to structural understanding
 //  and may become more useful in the future. This is disabled while still implementing functions.
 
-use core::{fmt, num};
+use core::fmt;
 use std::{fmt::Display, fs, io::Read, num::Wrapping, path::PathBuf};
 
 use crate::memory::{self, compose_address};
@@ -156,6 +156,17 @@ pub enum RomClkSpeed {
 pub enum RomExpansions {
     SA1,
     SDD1,
+    None,
+}
+
+impl From<RomCoProcessor> for RomExpansions {
+    fn from(value: RomCoProcessor) -> Self {
+        match value {
+            RomCoProcessor::SA1 => RomExpansions::SA1,
+            RomCoProcessor::SDD1 => RomExpansions::SDD1,
+            _ => RomExpansions::None,
+        }
+    }
 }
 
 /// Cart type doesn't really map linearly, which is kind of a headache.
@@ -169,21 +180,53 @@ pub enum CartType {
     ROMCoCpuSram = 0x04,
     ROMCoCpuSramBattery = 0x05,
     ROMCoCpuBattery = 0x06,
+    None = 0x07,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum RomCoProcessor {
-    None,
-    DSP,
-    SuperFX,
-    OBC1,
-    SA1,
-    SDD1,
-    SRTC,
-    Other, // Super Game Boy or Satellaview, out of scope
-    Custom,
+impl From<u8> for CartType {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => CartType::ROMOnly,
+            0x01 => CartType::ROMSram,
+            0x02 => CartType::ROMSramBattery,
+            0x03 => CartType::ROMCoCpu,
+            0x04 => CartType::ROMCoCpuSram,
+            0x05 => CartType::ROMCoCpuSramBattery,
+            0x06 => CartType::ROMCoCpuBattery,
+            _ => CartType::None,
+        }
+    }
 }
-const DSP_VALUE: usize = 0x01;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum RomCoProcessor {
+    DSP = 0x00,
+    SuperFX = 0x01,
+    OBC1 = 0x02,
+    SA1 = 0x03,
+    SDD1 = 0x04,
+    SRTC = 0x05,
+    Other = 0x0E, // Super Game Boy or Satellaview, out of scope
+    Custom = 0x0F,
+    None,
+}
+
+impl From<u8> for RomCoProcessor {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => RomCoProcessor::DSP,
+            0x01 => RomCoProcessor::SuperFX,
+            0x02 => RomCoProcessor::OBC1,
+            0x03 => RomCoProcessor::SA1,
+            0x04 => RomCoProcessor::SDD1,
+            0x05 => RomCoProcessor::SRTC,
+            0x0E => RomCoProcessor::Other,
+            0x0F => RomCoProcessor::Custom,
+            _ => RomCoProcessor::None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -192,6 +235,19 @@ pub enum CustomCoProcessor {
     ST010_11 = 0x01,
     ST018 = 0x02,
     CX4 = 0x03,
+    None = 0x04,
+}
+
+impl From<u8> for CustomCoProcessor {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => CustomCoProcessor::SPC7110,
+            0x01 => CustomCoProcessor::ST010_11,
+            0x02 => CustomCoProcessor::ST018,
+            0x03 => CustomCoProcessor::CX4,
+            _ => CustomCoProcessor::None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -215,21 +271,44 @@ pub enum RomRegion {
     Canada = 0x0F,
     Brazil = 0x10,
     Australia = 0x11,
+    None = 0x12, // Used internally only
+}
+
+impl From<u8> for RomRegion {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => RomRegion::Japan,
+            0x01 => RomRegion::USA,
+            0x02 => RomRegion::Europe,
+            0x03 => RomRegion::Sweden,
+            0x04 => RomRegion::Japan2,
+            0x05 => RomRegion::Denmark,
+            0x06 => RomRegion::France,
+            0x07 => RomRegion::Netherlands,
+            0x08 => RomRegion::Spain,
+            0x09 => RomRegion::Germany,
+            0x0A => RomRegion::Italy,
+            0x0B => RomRegion::China,
+            0x0C => RomRegion::Indonesia,
+            0x0D => RomRegion::SouthKorea,
+            0x0E => RomRegion::International,
+            0x0F => RomRegion::Canada,
+            0x10 => RomRegion::Brazil,
+            0x11 => RomRegion::Australia,
+            _ => RomRegion::None,
+        }
+    }
 }
 
 /// The decomposed values, out of header data.
 pub struct RomModeMapping {
-    mem_map: RomSize,
-    speed: RomClkSpeed,
-    sram_present: bool,
-    sram_size: u8,
-    region: RomRegion,
-    expansion_present: bool,
-    expansion: RomExpansions,
-    coproc_present: bool,
-    coproc: RomCoProcessor,
-    custom_coproc_present: bool,
-    custom_coproc: CustomCoProcessor,
+    pub mem_map: RomSize,
+    pub speed: RomClkSpeed,
+    pub sram_size: u8,
+    pub region: RomRegion,
+    pub expansion: RomExpansions,
+    pub coproc: RomCoProcessor,
+    pub custom_coproc: CustomCoProcessor,
 }
 
 impl RomModeMapping {
@@ -237,15 +316,11 @@ impl RomModeMapping {
         Self {
             mem_map: RomSize::LoRom,
             speed: RomClkSpeed::SlowRom,
-            sram_present: false,
             sram_size: 0,
-            region: RomRegion::Japan,
-            expansion_present: false,
-            expansion: RomExpansions::SA1,
-            coproc_present: false,
-            coproc: RomCoProcessor::DSP,
-            custom_coproc_present: false,
-            custom_coproc: CustomCoProcessor::CX4,
+            region: RomRegion::None,
+            expansion: RomExpansions::None,
+            coproc: RomCoProcessor::None,
+            custom_coproc: CustomCoProcessor::None,
         }
     }
 }
@@ -603,39 +678,45 @@ fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) {
 }
 
 fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
+    // FIXME: clean up these magic numbers later.
+
+    if data.header[HDR_MAP_MODE_INDEX] & MAP_FASTROM_MASK != 0 {
+        data.mode.speed = RomClkSpeed::FastRom;
+    }
+    else {
+        data.mode.speed = RomClkSpeed::SlowRom;
+    }
+
+    if data.header[HDR_DEST_CODE_INDEX] < RomRegion::None as u8 {
+        data.mode.region = RomRegion::from(data.header[HDR_DEST_CODE_INDEX]);
+    }
+
     // Low 4 bits specify presence or absence
     // https://snes.nesdev.org/wiki/ROM_header
     match data.header[HDR_CART_TYPE_INDEX] & 0x0F {
+        // TODO: you cannot do (CartType::RomOnly as u8) even if you have set a #[repr(u8)] for the enum.
+        // Find a nicer way to match this (I really don't want to go back and make constants for enums that exist already).
         0x00 => (), // ROM Only
         0x01 | 0x02 => {
             // 0x01: ROM + SRAM
             // 0x02: ROM + SRAM + Battery (Presence of battery is unnecessary for us)
-            data.mode.sram_present = true;
             // Max is 7
             data.mode.sram_size = (2usize.pow(data.header[HDR_RAM_SIZE_INDEX].into())) as u8;
         }
         0x03 => {
-            // CoCpu is present
-            data.mode.coproc_present = true;
             // Upper 4 bits specify type
-            match data.header[HDR_CART_TYPE_INDEX] & 0xF0 {
-                0x00 => data.mode.coproc = RomCoProcessor::DSP,
-                0x10 => data.mode.coproc = RomCoProcessor::SuperFX,
-                0x20 => data.mode.coproc = RomCoProcessor::OBC1,
-                0x30 => {
-                    data.mode.expansion_present = true;
-                    data.mode.expansion = RomExpansions::SA1;
-                    data.mode.coproc = RomCoProcessor::SA1;
-                }
-                0x40 => {
-                    data.mode.expansion_present = true;
-                    data.mode.expansion = RomExpansions::SDD1;
-                    data.mode.coproc = RomCoProcessor::SDD1;
-                }
-                0x50 => data.mode.coproc = RomCoProcessor::SRTC,
-                0xE0 => data.mode.coproc = RomCoProcessor::Other,
-                0xF0 => {
-                    data.mode.coproc = RomCoProcessor::Custom;
+            let cart_type = (data.header[HDR_CART_TYPE_INDEX] & 0xF0) >> 4;
+            if cart_type < RomCoProcessor::None as u8 {
+                data.mode.coproc = RomCoProcessor::from(cart_type);
+            }
+
+            // If a custom is present, then figure out what it is.
+            if data.mode.coproc == RomCoProcessor::Custom {
+                if data.header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT
+                    || data.header[HDR_FIXED_VAL_INDEX] == HDR_SUBTYPE_PRESENT
+                {
+                    data.mode.custom_coproc =
+                        CustomCoProcessor::from(data.opt_header[OPT_SUB_CART_TYPE_INDEX]);
                 }
             }
         }
@@ -649,6 +730,9 @@ fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
             ))
         }
     }
+
+    data.mode.expansion = RomExpansions::from(data.mode.coproc);
+
     return Err(RomReadError::new("Unimplemented".to_string()));
 }
 

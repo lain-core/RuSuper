@@ -54,6 +54,7 @@ const NON_INTERLACE_MODE_ALTERNATE_CYCLES_PER: usize = 1360;
 
 /// Struct to manage count of clocks.
 struct ClockState {
+    clock_speed: f64,
     master_clock_cycles_elapsed: usize,
     cpu_clock_cycles_elapsed: usize,
     ppu_clock_cycles_elapsed: usize,
@@ -63,6 +64,7 @@ struct ClockState {
 impl ClockState {
     pub fn new() -> Self {
         Self {
+            clock_speed: 0.0,
             master_clock_cycles_elapsed: 0,
             cpu_clock_cycles_elapsed: 0,
             ppu_clock_cycles_elapsed: 0,
@@ -94,20 +96,23 @@ impl VirtualMachine {
 /// # Parameters
 ///     - `vm`  Object holding CPU state and Memory for this instance.
 pub fn run(path: std::path::PathBuf) {
-    // TODO: Should CPU be threaded or should this file be the king?
-    // TODO: Spin off thread for SPC700
-    // TODO: Spin off thread for PPU(?)
-
     // Initialize the VM and then load the ROM into memory.
     let mut vm = VirtualMachine::new();
     vm.romdata = romdata::load_rom(path, &mut vm.memory).unwrap();
+    vm.clocks.clock_speed = match vm.romdata.mode.speed {
+        romdata::RomClkSpeed::SlowRom => SLOWROM_CLOCK_CYCLE_TICK_SEC,
+        romdata::RomClkSpeed::FastRom => FASTROM_CLOCK_CYCLE_TICK_SEC,
+    };
     let mut vm_running = true;
 
-    // Track number of cycles to do calculations on. Doesn't matter if this rolls over.
-    let mut cycles_elapsed: std::num::Wrapping<usize> = std::num::Wrapping(0);
     loop {
-        check_dbg_input();
-        if vm_running {}
+        // TODO: Should CPU be threaded or should this file be the king?
+        // TODO: Spin off thread for SPC700(?)
+        // TODO: Spin off thread for PPU(?)
+        // check_dbg_input();
+        if vm_running {
+            vm_running = step_cpu(&mut vm);
+        }
     }
 }
 
@@ -124,14 +129,8 @@ fn step_cpu(vm: &mut VirtualMachine) -> bool {
     // Otherwise, punt on operating for however long we need to.
     else if vm.cpu.cycles_to_pend > 0 {
         // We have to round because rust does not implement fractional nanoseconds (how unbelievable!!)
-        let cpu_cycle_time: f64;
-        match vm.romdata.mem_map {
-            romdata::RomSize::LoRom => ,
-            romdata::RomSize::HiRom => todo!(),
-            romdata::RomSize::ExHiRom => todo!(),
-        }
-        std::thread::sleep(time::Duration::from_secs_f64());
-        cycles_elapsed += 1;
+        std::thread::sleep(time::Duration::from_secs_f64(vm.clocks.clock_speed));
+        vm.clocks.cpu_clock_cycles_elapsed += 1;
         vm.cpu.cycles_to_pend -= 1;
     }
     return vm_running;
