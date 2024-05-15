@@ -373,21 +373,32 @@ impl Display for RomReadError {
 /// # Parameters:
 ///     - `path`:       Path to file to open
 ///     - `memory`:     Memory to prepare.
-pub fn load_rom(path: PathBuf, memory: &mut memory::Memory) -> Result<RomData, RomReadError> {
+pub fn load_rom(
+    path: PathBuf, memory: &mut memory::Memory, bypass_tests: bool,
+) -> Result<RomData, RomReadError> {
     // Attempt to read to buffer.
     let rom = read_rom_to_buf(path)?;
+    let mut data = RomData::new();
 
-    // Grab the header from the ROM and determine what size it is.
-    let mut data = fetch_header(&rom)?;
-    fetch_opt_header(&rom, &mut data);
-    fetch_exception_vectors(&rom, &mut data);
+    if bypass_tests {
+        println!("Bypassing tests and writing rom to memory...");
+        for offset in 0..rom.capacity() {
+            memory.put_byte(0x808000 + offset, rom[offset]);
+        }
+    }
+    else {
+        // Grab the header from the ROM and determine what size it is.
+        data = fetch_header(&rom)?;
+        fetch_opt_header(&rom, &mut data);
+        fetch_exception_vectors(&rom, &mut data);
 
-    // Decompose the header into more easily usable data.
-    populate_rom_mapping(&mut data)?;
+        // Decompose the header into more easily usable data.
+        populate_rom_mapping(&mut data)?;
 
-    // Write it into memory, and write the mirror.
-    write_rom_to_memory(&rom, data.mode.mem_map, memory)?;
-    write_rom_mirror(&rom, data.mode.mem_map, memory)?;
+        // Write it into memory, and write the mirror.
+        write_rom_to_memory(&rom, data.mode.mem_map, memory)?;
+        write_rom_mirror(&rom, data.mode.mem_map, memory)?;
+    }
     Ok(data)
 }
 
@@ -451,7 +462,7 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
 fn write_rom_to_memory(
     rom: &Vec<u8>, mem_map: RomSize, mem_ptr: &mut memory::Memory,
 ) -> Result<(), RomReadError> {
-    let num_banks: usize;
+    let mut num_banks: usize;
     let bank_size: BankSize;
     let base_addr: usize;
     match mem_map {

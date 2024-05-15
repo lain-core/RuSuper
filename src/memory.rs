@@ -46,9 +46,11 @@ impl Memory {
                 // Stupid: The width specifier for hex formatting applies to the leading "0x" also; all widths must be +2.
                 print!("\n{:#06X}: [", byte_index);
                 print!(" {:#04X}, ", byte_value);
-            } else if byte_index % 0x10 == 0x0F {
+            }
+            else if byte_index % 0x10 == 0x0F {
                 print!("{:#04X} ]", byte_value);
-            } else {
+            }
+            else {
                 print!("{:#04X}, ", byte_value);
             }
         }
@@ -96,11 +98,9 @@ impl Memory {
     ///     - `Ok(())`:         If written OK.
     ///     
     pub fn put_bank(
-        &mut self,
-        banktype: romdata::BankSize,
-        address: usize,
-        bankdata: &[u8],
+        &mut self, banktype: romdata::BankSize, address: usize, bankdata: &[u8],
     ) -> Result<(), InvalidAddressError> {
+        println!("Writing bank starting at {:#08X}", address);
         match address_is_valid(address + banktype as usize - 1) {
             Ok(_t) => {
                 for offset in 0..banktype as usize - 1 {
@@ -199,7 +199,8 @@ pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
 pub fn address_is_valid(address: usize) -> Result<(), InvalidAddressError> {
     if address < MEMORY_SIZE {
         Ok(())
-    } else {
+    }
+    else {
         println!("Error");
         Err(InvalidAddressError::new(address))
     }

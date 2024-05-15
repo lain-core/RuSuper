@@ -1361,12 +1361,12 @@ impl CpuState {
     pub const fn new() -> Self {
         Self {
             acc: 0x0000,
-            pc: 0x0000,
+            pc: 0x8000,
             sp: 0x0000,
             flags: 0x00,
             direct_page: 0x0000,
             data_bank: 0x00,
-            prog_bank: 0x00,
+            prog_bank: 0x80,
             cycles_to_pend: 0x00,
         }
     }
@@ -1416,7 +1416,7 @@ impl CpuState {
         }
 
         // Call the function to execute.
-        println!("Executing {:#?}", inst);
+        println!("Executing {:?} with width {:?}", inst.opcode, inst.width);
         continue_run = (inst.function)(self, &mut p_mem, parameter_value);
         self.pc += pc_addr_increment;
 

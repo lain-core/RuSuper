@@ -95,10 +95,22 @@ impl VirtualMachine {
 /// Also manages timings and delegates to other legs of the system. Might be worth breaking up in the future.
 /// # Parameters
 ///     - `vm`  Object holding CPU state and Memory for this instance.
-pub fn run(path: std::path::PathBuf) {
-    // Initialize the VM and then load the ROM into memory.
+pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     let mut vm = VirtualMachine::new();
-    vm.romdata = romdata::load_rom(path, &mut vm.memory).unwrap();
+    // TODO: find a better way to do this
+    if args.capacity() > 2 {
+        if args[2] == "--no-check" {
+            vm.romdata = romdata::load_rom(path, &mut vm.memory, true).unwrap();
+        }
+        else {
+            vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
+        }
+    }
+    else {
+        // Initialize the VM and then load the ROM into memory.
+        vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
+    }
+
     vm.clocks.clock_speed = match vm.romdata.mode.speed {
         romdata::RomClkSpeed::SlowRom => SLOWROM_CLOCK_CYCLE_TICK_SEC,
         romdata::RomClkSpeed::FastRom => FASTROM_CLOCK_CYCLE_TICK_SEC,

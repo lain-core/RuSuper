@@ -16,7 +16,7 @@ pub fn main() {
     if args.len() > 1 {
         let path = std::fs::canonicalize(Path::new(&args[1])).expect("File not found");
         // Start Running.
-        emu::run(path);
+        emu::run(path, args);
     }
     else {
         println!("You must specify a *.sfc file to run!");
