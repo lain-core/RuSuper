@@ -161,6 +161,8 @@ type DebugFn = Box<dyn Fn(Vec<&str>, &mut VirtualMachine)>;
 ///     - `vm`  Object holding CPU state and Memory for this instance.
 pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     print!("Opening file {}... ", &path.display());
+
+    let debug_cmd_table = construct_cmd_table();
     let mut vm = VirtualMachine::new();
     // TODO: find a better way to do this
     if args.capacity() > 2 {
@@ -190,7 +192,7 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
             vm.debugger.is_running = step_cpu(&mut vm);
         }
         else {
-            check_dbg_input(&mut vm);
+            check_dbg_input(&mut vm, &debug_cmd_table);
         }
     }
 }
@@ -220,8 +222,8 @@ fn step_cpu(vm: &mut VirtualMachine) -> bool {
     return vm_running;
 }
 
-fn check_dbg_input(vm: &mut VirtualMachine) {
-    let debug_cmd_map: HashMap<DebugCommandTypes, DebugFn> = HashMap::from([
+fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
+    HashMap::from([
         (DebugCommandTypes::Help, Box::new(misc::dbg_help) as DebugFn),
         (
             DebugCommandTypes::Continue,
@@ -232,14 +234,16 @@ fn check_dbg_input(vm: &mut VirtualMachine) {
             Box::new(misc::dbg_invalid) as DebugFn,
         ),
         (DebugCommandTypes::Exit, Box::new(misc::dbg_exit) as DebugFn),
-    ]);
+    ])
+}
 
+fn check_dbg_input(vm: &mut VirtualMachine, debug_cmd_map: &HashMap<DebugCommandTypes, DebugFn>) {
     let mut input_text = String::new();
     io::stdin()
         .read_line(&mut input_text)
         .expect("Failed to read stdin");
     let trimmed: Vec<&str> = input_text.trim().split_whitespace().collect();
-    if (trimmed.capacity() > 0) {
+    if trimmed.capacity() > 0 {
         let command: DebugCommandTypes = DebugCommandTypes::from(trimmed[0]);
         debug_cmd_map[&command](trimmed[1..].to_vec(), vm);
     }
