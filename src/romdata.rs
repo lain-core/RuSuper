@@ -47,8 +47,8 @@ const HDR_RAM_SIZE_INDEX: usize = HDR_ROM_SIZE_INDEX + HDR_ROM_SIZE_LEN;
 const HDR_DEST_CODE_INDEX: usize = HDR_RAM_SIZE_INDEX + HDR_RAM_SIZE_LEN;
 const HDR_FIXED_VAL_INDEX: usize = HDR_DEST_CODE_INDEX + HDR_DEST_CODE_LEN;
 const HDR_MASK_ROM_VER_INDEX: usize = HDR_FIXED_VAL_INDEX + HDR_FIXED_VAL_LEN;
-const HDR_CHECKSUM_INDEX: usize = HDR_MASK_ROM_VER_INDEX + HDR_MASK_ROM_VER_LEN;
-const HDR_COMPLEMENT_CHECK_INDEX: usize = HDR_CHECKSUM_INDEX + HDR_COMPLEMENT_CHECK_LEN;
+const HDR_COMPLEMENT_CHECK_INDEX: usize = HDR_MASK_ROM_VER_INDEX + HDR_MASK_ROM_VER_LEN;
+const HDR_CHECKSUM_INDEX: usize = HDR_COMPLEMENT_CHECK_INDEX + HDR_COMPLEMENT_CHECK_LEN;
 
 const HDR_TEST_VALUE: u16 = 0xFFFF; // A test checksum + the complement value should equal this value.
 const HDR_OPT_PRESENT: u8 = 0x33; // Value in HDR_FIXED_VAL_INDEX if the optional header is present.
@@ -284,13 +284,14 @@ impl Display for RomReadError {
 /// # Parameters:
 ///     - `path`:       Path to file to open
 ///     - `memory`:     Memory to prepare.
-pub fn load_rom(path: PathBuf, mut memory: &memory::Memory) -> Result<RomData, RomReadError> {
+pub fn load_rom(path: PathBuf, memory: &mut memory::Memory) -> Result<RomData, RomReadError> {
     // Attempt to read to buffer.
     let rom = read_rom_to_buf(path)?;
     let mut data = fetch_header(&rom)?;
-    let customProc = fetch_opt_header(&rom, &mut data);
+    let _customProc = fetch_opt_header(&rom, &mut data);
     fetch_exception_vectors(&rom, &mut data);
-
+    write_rom_to_memory(&rom, data.mem_map, memory).unwrap();
+    write_rom_mirror(&rom, data.mem_map, memory).unwrap();
     Ok(data)
 }
 
@@ -492,7 +493,9 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 
     if rom.capacity().is_power_of_two() {
         // If so, add the value of all the bytes therein.
-        let _ = rom.iter().map(|x| checksum += Wrapping(*x as u16));
+        for index in 0..rom.capacity() {
+            checksum += Wrapping(rom[index] as u16);
+        }
     }
     else {
         // Otherwise, find the highest power of 2 available and then multiply the following data to equal that size.
@@ -658,6 +661,7 @@ mod tests {
 
     mod lorom_tests {
         use super::*;
+
         #[test]
         fn test_lorom_checksum() {
             assert_eq!(
