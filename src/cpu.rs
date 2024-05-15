@@ -1308,38 +1308,7 @@ const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
     }, /* 0xFF */
 ];
 
-/***** Timing related constants *****/
-// The SNES master clock runs at about 21.477MHz NTSC (theoretically 1.89e9/88 Hz).
-// https://wiki.superfamicom.org/timing
-const CLOCK_CYCLE_TICK_NS: f64 = 46.5614378172;
-/// Approximation of 1x 21.477MHz pulse in nanoseconds
-const CYCLES_PER_SCANLINE: usize = 1364;
-/// Number of cycles between draw of scanline.
-const NON_INTERLACE_MODE_ALTERNATE_CYCLES_PER: usize = 1360;
-/// Every other frame in non-interlaced, 4 less cycles per frame. This is "extra credit".
-const SCANLINES_PER_FRAME: usize = 262;
-/// Number of scanlines per 1 frame (e.g. 60Hz)
-const CYCLES_PER_FRAME: usize = SCANLINES_PER_FRAME * CYCLES_PER_SCANLINE;
-/// Number of cycles per 1 frame (e.g. 60Hz)
-
 /***** Implementation of enums and structures for CPU *****/
-
-/// VM Struct which contains the individual pieces of the system.
-struct VirtualMachine {
-    cpu: CpuState,
-    memory: memory::Memory,
-    romdata: romdata::RomData,
-}
-
-impl VirtualMachine {
-    pub fn new() -> Self {
-        Self {
-            cpu: CpuState::new(),
-            memory: memory::Memory::new(),
-            romdata: romdata::RomData::new(),
-        }
-    }
-}
 
 /// Enumerated type to match to an opcode. Useful for debugging because it can be represented easily as a string.
 /// https://wiki.superfamicom.org/65816-reference
@@ -1456,58 +1425,6 @@ impl CpuState {
 }
 
 /***** File scope functions *****/
-
-/// Run the system.
-/// Also manages timings and delegates to other legs of the system. Might be worth breaking up in the future.
-/// # Parameters
-///     - `vm`  Object holding CPU state and Memory for this instance.
-pub fn run(path: std::path::PathBuf) {
-    // TODO: Spin off thread for debugger
-    // TODO: Spin off thread for SPC700
-    // TODO: Spin off thread for PPU(?)
-
-    // Initialize the VM and then load the ROM into memory.
-    let mut vm = VirtualMachine::new();
-    vm.romdata = romdata::load_rom(path, &mut vm.memory).unwrap();
-
-    // Debugger loop which parses user inputs.
-    let mut vm_running = true;
-
-    // Track number of cycles to do calculations on. Doesn't matter if this rolls over.
-    let mut cycles_elapsed: std::num::Wrapping<usize> = std::num::Wrapping(0);
-    loop {
-        // Check if the vm is running and step if so.
-        // This is not self-contained in a loop because the outside will contain debugger functions in the future.
-        // The SNES master clock runs at about 21.477MHz NTSC (theoretically 1.89e9/88 Hz).
-        // The SNES CPU runs at either 2.68MHz or 3.58MHz based on what a rom requests.
-        // https://wiki.superfamicom.org/timing
-
-        if vm_running {
-            // Draw a scanline.
-            if cycles_elapsed % std::num::Wrapping(CYCLES_PER_SCANLINE as usize)
-                == std::num::Wrapping(0)
-            {
-                // TODO: PPU something
-            }
-
-            // If there is no need to pend on another cycle, then go ahead and run an operation.
-            if vm.cpu.cycles_to_pend == 0 {
-                vm_running = vm.cpu.step(&mut vm.memory);
-                println!(
-                    "Next instruction stalled by {} cycles",
-                    vm.cpu.cycles_to_pend
-                );
-            }
-            // Otherwise, punt on operating for however long we need to.
-            else if vm.cpu.cycles_to_pend > 0 {
-                // We have to round because rust does not implement fractional nanoseconds (how unbelievable!!)
-                std::thread::sleep(time::Duration::from_nanos(CLOCK_CYCLE_TICK_NS as u64));
-                cycles_elapsed += 1;
-                vm.cpu.cycles_to_pend -= 1;
-            }
-        }
-    }
-}
 
 /***** Tests *****/
 #[cfg(test)]
