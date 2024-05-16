@@ -2,6 +2,7 @@ use std::env;
 use std::path::Path;
 
 mod cpu;
+mod debugger;
 mod emu;
 mod memory;
 mod romdata;

@@ -1,5 +1,5 @@
 use super::VirtualMachine;
-use crate::emu::utils;
+use crate::debugger::utils;
 use std::process::exit;
 
 const NUM_ADDR_BYTES: usize = 3;
@@ -24,7 +24,7 @@ pub fn dbg_invalid(_args: Vec<&str>, _vm: &mut VirtualMachine) {
 }
 
 pub fn dbg_continue(_args: Vec<&str>, vm: &mut VirtualMachine) {
-    vm.debugger.is_running = true;
+    vm.is_running = true;
 }
 
 pub fn dbg_print(args: Vec<&str>, vm: &mut VirtualMachine) {

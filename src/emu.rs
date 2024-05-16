@@ -1,49 +1,11 @@
-use std::collections::HashMap;
 use std::io;
 use std::io::Write;
 use std::time;
 
 use crate::cpu;
+use crate::debugger;
 use crate::memory;
 use crate::romdata;
-
-mod breakpoints;
-mod misc;
-mod utils;
-
-/*******
- * Brainstorming: command ideas:
- *  - h             help
- *  - help          help
- *  - tag $XXXXXX   Assign variable name to address 0xXXXXXX
- *  - b             Set breakpoint at current PC
- *      - b +N          Set breakpoint at memory address PC + N
- *      - b $XXXXXX     Set breakpoint at absolute address 0xXXXXXX
- *      - b tag
- *      - b tag+N
- *      - b show        Show breakpoints
- *      - b del X       Delete breakpoint X
- *  - r             Run until breakpoint or termination
- *      - c             alias for R
- *  - s             Step 1 instruction
- *      - s N           Step N instructions
- *      - s tag         Continue running until target tag is reached.
- *  - w $XXXXXX     Watch value, break on modification at 0xXXXXXX
- *      - w tag         Watch value, break on modification at tag
- *  - pb $XXXXXX  Print byte value at absolute address $XXXXXX
- *      - pb tag      ""
- *      - pw $XXXXXX  Print word value at absolute address $XXXXXX
- *      - pw tag      ""
- *  - dump  Dump current state (all sub-options) to working dir.
- *      - dump loram    Dump memory from 0x000000 - 0x3F1FFF+0x7E0000 - 0x7E1FFF (SNES LoRAM) to loram.bin in working dir.
- *      - dump ppu      Dump memory from 0x002000 - 0x3F3FFF (SNES PPU/APU) to apu.bin in working dir.
- *      - dump controller   Dump Memory from 0x004000 - 0x3F41FF to controller.bin
- *      - dump cpu          Dump memory from 0x004200 - 0x3F5FFF to cpu.bin
- *      - dump expansion    Dump memory from 0x006000 - 0x3F7FFF to expansion.bin
- *      - dump ram          Dump memory from 0x7E0000 - 0x7FFFFF to ram.bin (includes slice of loram)
- *      - dump tags         Dump tags to tags.txt (tags.toml?)
- *      - dump b            Dump breakpoints to breakpoints.txt (breakpoints.toml?). Include tags if possible
- */
 
 /***** Timing related constants *****/
 // Check if the vm is running and step if so.
@@ -60,27 +22,6 @@ const CYCLES_PER_SCANLINE: usize = 1364;
 
 /// Every other frame in non-interlaced, 4 less cycles per frame. This is "extra credit".
 const NON_INTERLACE_MODE_ALTERNATE_CYCLES_PER: usize = 1360;
-
-/// Struct to track the operation of the debugger.
-struct DebuggerState {
-    is_running: bool,
-    steps_to_run: usize,
-    breakpoints: Vec<usize>,
-    watched_vars: Vec<usize>,
-    tags: HashMap<String, usize>,
-}
-
-impl DebuggerState {
-    pub fn new() -> Self {
-        Self {
-            is_running: false,
-            steps_to_run: 0,
-            watched_vars: Vec::new(),
-            breakpoints: Vec::new(),
-            tags: HashMap::new(),
-        }
-    }
-}
 
 /// Struct to manage count of clocks.
 struct ClockState {
@@ -103,12 +44,12 @@ impl ClockState {
 }
 
 /// VM Struct which contains the individual pieces of the system.
-struct VirtualMachine {
-    cpu: cpu::CpuState,
-    memory: memory::Memory,
-    romdata: romdata::RomData,
-    clocks: ClockState,
-    debugger: DebuggerState,
+pub struct VirtualMachine {
+    pub cpu: cpu::CpuState,
+    pub memory: memory::Memory,
+    pub romdata: romdata::RomData,
+    pub clocks: ClockState,
+    pub is_running: bool,
 }
 
 impl VirtualMachine {
@@ -118,45 +59,10 @@ impl VirtualMachine {
             memory: memory::Memory::new(),
             romdata: romdata::RomData::new(),
             clocks: ClockState::new(),
-            debugger: DebuggerState::new(),
+            is_running: false,
         }
     }
 }
-
-#[derive(Hash, PartialEq, Eq)]
-enum DebugCommandTypes {
-    Help,
-    Break,
-    Continue,
-    Step,
-    Tag,
-    Dump,
-    Print,
-    Watch,
-    Exit,
-    Invalid,
-}
-
-impl From<&str> for DebugCommandTypes {
-    fn from(value: &str) -> Self {
-        match value {
-            "b" => Self::Break,
-            "break" => Self::Break,
-            "h" => Self::Help,
-            "help" => Self::Help,
-            "c" => Self::Continue,
-            "r" => Self::Continue,
-            "q" => Self::Exit,
-            "quit" => Self::Exit,
-            "exit" => Self::Exit,
-            "p" => Self::Print,
-            "print" => Self::Print,
-            _ => Self::Invalid,
-        }
-    }
-}
-
-type DebugFn = Box<dyn Fn(Vec<&str>, &mut VirtualMachine)>;
 
 /// Run the system.
 /// Also manages timings and delegates to other legs of the system. Might be worth breaking up in the future.
@@ -165,7 +71,6 @@ type DebugFn = Box<dyn Fn(Vec<&str>, &mut VirtualMachine)>;
 pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     print!("Opening file {}... ", &path.display());
 
-    let debug_cmd_table = construct_cmd_table();
     let mut vm = VirtualMachine::new();
     // TODO: find a better way to do this
     if args.len() > 2 {
@@ -180,24 +85,28 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
         // Initialize the VM and then load the ROM into memory.
         vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
     }
+    print!("Success.\n");
+    io::stdout().flush().unwrap();
 
     vm.clocks.clock_speed = match vm.romdata.mode.speed {
         romdata::RomClkSpeed::SlowRom => SLOWROM_CLOCK_CYCLE_TICK_SEC,
         romdata::RomClkSpeed::FastRom => FASTROM_CLOCK_CYCLE_TICK_SEC,
     };
-    print!("Success.\n");
-    io::stdout().flush().unwrap();
-    loop {
-        // TODO: Should CPU be threaded or should this file be the king?
-        // TODO: Spin off thread for SPC700(?)
-        // TODO: Spin off thread for PPU(?)
-        if vm.debugger.is_running {
-            vm.debugger.is_running = step_cpu(&mut vm);
-        }
-        else {
-            print!(">> ");
-            io::stdout().flush().unwrap();
-            check_dbg_input(&mut vm, &debug_cmd_table);
+
+    // If the user wants to use the debugger let it delegate the run loop.
+    let debugger_enabled = true;
+    if debugger_enabled {
+        debugger::run(vm);
+    }
+    else {
+        vm.is_running = true;
+        while vm.is_running {
+            // TODO: Should CPU be threaded or should this file be the king?
+            // TODO: Spin off thread for SPC700(?)
+            // TODO: Spin off thread for PPU(?)
+            // If the debugger is enabled, allow it to delegate the runtime.
+            // If the debugger is not enabled, just run as normal.
+            vm.is_running = step_cpu(&mut vm);
         }
     }
 }
@@ -207,7 +116,7 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
 ///     - `vm`:         Pointer to VM containing state for the emulator.
 /// # Returns:
 ///     - `vm_running`: Whether the VM is running or has stopped.
-fn step_cpu(vm: &mut VirtualMachine) -> bool {
+pub fn step_cpu(vm: &mut VirtualMachine) -> bool {
     let mut vm_running = true;
     // If there is no need to pend on another cycle, then go ahead and run an operation.
     if vm.cpu.cycles_to_pend == 0 {
@@ -225,39 +134,4 @@ fn step_cpu(vm: &mut VirtualMachine) -> bool {
         vm.cpu.cycles_to_pend -= 1;
     }
     return vm_running;
-}
-
-fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
-    HashMap::from([
-        (DebugCommandTypes::Help, Box::new(misc::dbg_help) as DebugFn),
-        (
-            DebugCommandTypes::Continue,
-            Box::new(misc::dbg_continue) as DebugFn,
-        ),
-        (
-            DebugCommandTypes::Invalid,
-            Box::new(misc::dbg_invalid) as DebugFn,
-        ),
-        (DebugCommandTypes::Exit, Box::new(misc::dbg_exit) as DebugFn),
-        (
-            DebugCommandTypes::Break,
-            Box::new(breakpoints::dbg_breakpoint) as DebugFn,
-        ),
-        (
-            DebugCommandTypes::Print,
-            Box::new(misc::dbg_print) as DebugFn,
-        ),
-    ])
-}
-
-fn check_dbg_input(vm: &mut VirtualMachine, debug_cmd_map: &HashMap<DebugCommandTypes, DebugFn>) {
-    let mut input_text = String::new();
-    io::stdin()
-        .read_line(&mut input_text)
-        .expect("Failed to read stdin");
-    let trimmed: Vec<&str> = input_text.trim().split_whitespace().collect();
-    if trimmed.capacity() > 0 {
-        let command: DebugCommandTypes = DebugCommandTypes::from(trimmed[0]);
-        debug_cmd_map[&command](trimmed[1..].to_vec(), vm);
-    }
 }
