@@ -5,7 +5,7 @@ mod utils;
 use crate::emu::{self, VirtualMachine};
 use std::{
     collections::HashMap,
-    io::{self, Write},
+    io::{self, Write}, iter::Map,
 };
 /**************************************** Struct and Type definitions ***************************************************/
 
@@ -68,6 +68,7 @@ impl From<&str> for DebugCommandTypes {
 enum TokenSeparators {
     HexValue,
     Offset,
+    Value(String),
     Invalid,
 }
 
@@ -75,7 +76,6 @@ impl From<&str> for TokenSeparators {
     fn from(value: &str) -> Self {
         match value {
             "$" => Self::HexValue,
-            "0x" => Self::HexValue,
             "+" => Self::Offset,
             _ => Self::Invalid,
         }
@@ -114,8 +114,13 @@ fn check_dbg_input(debug: &mut DebuggerState, vm: &mut VirtualMachine) {
         .read_line(&mut input_text)
         .expect("Failed to read stdin");
     let trimmed: Vec<&str> = input_text.trim().split_whitespace().collect();
+    // let args: Map<TokenSeparators, &str>;
+
     if trimmed.capacity() > 0 {
-        let command: DebugCommandTypes = DebugCommandTypes::from(trimmed[0]);
+        let command: DebugCommandTypes = DebugCommandTypes::from(
+            trimmed[0].to_lowercase().as_ref()
+        );
+        // args = utils::collect_args(trimmed).unwrap();
         debug.debug_cmds[&command](trimmed[1..].to_vec(), vm);
     }
 }

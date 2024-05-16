@@ -1,4 +1,6 @@
-use std::string;
+use std::{iter::Map, str::Chars, string};
+
+use super::TokenSeparators;
 
 /**************************************** Struct and Type definitions ***************************************************/
 #[derive(Debug, Clone)]
@@ -59,6 +61,50 @@ impl HexOperators for &str {
 
 /**************************************** File Scope Functions **********************************************************/
 
+pub fn collect_args(args: Vec<&str>) -> Result<Map<TokenSeparators, &str>, InvalidValueError> {
+    let token_stream = args.concat();
+    let mut delimiters: Vec<TokenSeparators> = vec![];
+    let mut value_buffer: String = "".to_string();
+    
+    for index in 0..token_stream.len() {
+        let current_char = token_stream.chars().nth(index).unwrap();
+        match TokenSeparators::from(token_stream.get(index..index).unwrap()) {
+            // If a separator is found, clear the buffer of other characters and then push on the sepatator.
+            TokenSeparators::HexValue => {
+                if value_buffer.len() > 0 {
+                    delimiters.push(TokenSeparators::Value(value_buffer));
+                    value_buffer = "".to_string();
+                }
+                delimiters.push(TokenSeparators::HexValue);
+                // Everything until the next value is a hex digit.
+            },
+            
+            TokenSeparators::Offset => {
+                if value_buffer.len() > 0 {
+                    delimiters.push(TokenSeparators::Value(value_buffer));
+                    value_buffer = "".to_string();
+                }
+                delimiters.push(TokenSeparators::Offset)
+            },
+            
+            // If it is not a delimiting character, push it onto the value buffer.
+            TokenSeparators::Invalid => {
+                value_buffer.push(current_char);
+            },
+            TokenSeparators::Value(_) => () // This is not a possible option in the TokenSeparators::from constructor
+        }
+    }
+    
+    Err(InvalidValueError::from(""))
+}
+
+/// Convert a String value into a constructed hex value.
+/// E.G., "$808000" becomes 0x808000.
+/// Parameters:
+///     - `text`:   String to parse.
+/// Returns:
+///     - `Ok(value)`:  Parsed Hex Value.
+///     - `Err(e)`:     If string passed contained data other than a marker and hexa-numeric digits.
 fn string_to_hex(text: &str) -> Result<usize, InvalidValueError> {
     let mut value = text.to_string().clone();
 
