@@ -46,9 +46,11 @@ impl Memory {
                 // Stupid: The width specifier for hex formatting applies to the leading "0x" also; all widths must be +2.
                 print!("\n{:#06X}: [", byte_index);
                 print!(" {:#04X}, ", byte_value);
-            } else if byte_index % 0x10 == 0x0F {
+            }
+            else if byte_index % 0x10 == 0x0F {
                 print!("{:#04X} ]", byte_value);
-            } else {
+            }
+            else {
                 print!("{:#04X}, ", byte_value);
             }
         }
@@ -96,13 +98,11 @@ impl Memory {
     ///     - `Ok(())`:         If written OK.
     ///     
     pub fn put_bank(
-        &mut self,
-        banktype: romdata::BankSize,
-        address: usize,
-        bankdata: &[u8],
+        &mut self, banktype: romdata::BankSize, address: usize, bankdata: &[u8],
     ) -> Result<(), InvalidAddressError> {
         match address_is_valid(address + banktype as usize - 1) {
             Ok(_t) => {
+                println!("Writing bank starting at {:#08X}", address);
                 for offset in 0..banktype as usize - 1 {
                     self.memory[address + offset] = bankdata[offset];
                 }
@@ -148,12 +148,11 @@ impl Memory {
     pub fn get_word(&self, address: usize) -> Result<u16, InvalidAddressError> {
         match address_is_valid(address + 1) {
             Ok(_t) => {
-                // This operation should not actually be unsafe as the address of byte 1 is already validated.
-                unsafe {
-                    let word_ptr: *const u16 =
-                        self.memory.as_slice().as_ptr().add(address).cast::<u16>();
-                    Ok((*word_ptr).to_be())
-                }
+                    let word_val: u16 = u16::from_le_bytes([
+                        self.memory[address],
+                        self.memory[address+1]
+                    ]);
+                    Ok((word_val).to_be())
             }
             Err(e) => Err(e),
         }
@@ -199,7 +198,8 @@ pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
 pub fn address_is_valid(address: usize) -> Result<(), InvalidAddressError> {
     if address < MEMORY_SIZE {
         Ok(())
-    } else {
+    }
+    else {
         println!("Error");
         Err(InvalidAddressError::new(address))
     }

@@ -1,8 +1,8 @@
-// #![allow(unused)]
+#![allow(unused)]
 // There are a lot of currently unused const values in this file, but they are important to structural understanding
 //  and may become more useful in the future. This is disabled while still implementing functions.
 
-use core::{fmt, num};
+use core::fmt;
 use std::{fmt::Display, fs, io::Read, num::Wrapping, path::PathBuf};
 
 use crate::memory::{self, compose_address};
@@ -154,9 +154,19 @@ pub enum RomClkSpeed {
 /// Note that SuperFX and others have their own memory map which is not covered by this.
 #[derive(Debug, Clone, Copy)]
 pub enum RomExpansions {
-    None,
     SA1,
     SDD1,
+    None,
+}
+
+impl From<RomCoProcessor> for RomExpansions {
+    fn from(value: RomCoProcessor) -> Self {
+        match value {
+            RomCoProcessor::SA1 => RomExpansions::SA1,
+            RomCoProcessor::SDD1 => RomExpansions::SDD1,
+            _ => RomExpansions::None,
+        }
+    }
 }
 
 /// Cart type doesn't really map linearly, which is kind of a headache.
@@ -170,18 +180,52 @@ pub enum CartType {
     ROMCoCpuSram = 0x04,
     ROMCoCpuSramBattery = 0x05,
     ROMCoCpuBattery = 0x06,
+    None = 0x07,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl From<u8> for CartType {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => CartType::ROMOnly,
+            0x01 => CartType::ROMSram,
+            0x02 => CartType::ROMSramBattery,
+            0x03 => CartType::ROMCoCpu,
+            0x04 => CartType::ROMCoCpuSram,
+            0x05 => CartType::ROMCoCpuSramBattery,
+            0x06 => CartType::ROMCoCpuBattery,
+            _ => CartType::None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RomCoProcessor {
     DSP = 0x00,
     SuperFX = 0x01,
     OBC1 = 0x02,
-    SDD1 = 0x03,
-    SRTC = 0x04,
-    Other = 0x05,
-    Custom = 0xFF,
+    SA1 = 0x03,
+    SDD1 = 0x04,
+    SRTC = 0x05,
+    Other = 0x0E, // Super Game Boy or Satellaview, out of scope
+    Custom = 0x0F,
+    None,
+}
+
+impl From<u8> for RomCoProcessor {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => RomCoProcessor::DSP,
+            0x01 => RomCoProcessor::SuperFX,
+            0x02 => RomCoProcessor::OBC1,
+            0x03 => RomCoProcessor::SA1,
+            0x04 => RomCoProcessor::SDD1,
+            0x05 => RomCoProcessor::SRTC,
+            0x0E => RomCoProcessor::Other,
+            0x0F => RomCoProcessor::Custom,
+            _ => RomCoProcessor::None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -191,6 +235,19 @@ pub enum CustomCoProcessor {
     ST010_11 = 0x01,
     ST018 = 0x02,
     CX4 = 0x03,
+    None = 0x04,
+}
+
+impl From<u8> for CustomCoProcessor {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => CustomCoProcessor::SPC7110,
+            0x01 => CustomCoProcessor::ST010_11,
+            0x02 => CustomCoProcessor::ST018,
+            0x03 => CustomCoProcessor::CX4,
+            _ => CustomCoProcessor::None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -214,14 +271,44 @@ pub enum RomRegion {
     Canada = 0x0F,
     Brazil = 0x10,
     Australia = 0x11,
+    None = 0x12, // Used internally only
 }
 
+impl From<u8> for RomRegion {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => RomRegion::Japan,
+            0x01 => RomRegion::USA,
+            0x02 => RomRegion::Europe,
+            0x03 => RomRegion::Sweden,
+            0x04 => RomRegion::Japan2,
+            0x05 => RomRegion::Denmark,
+            0x06 => RomRegion::France,
+            0x07 => RomRegion::Netherlands,
+            0x08 => RomRegion::Spain,
+            0x09 => RomRegion::Germany,
+            0x0A => RomRegion::Italy,
+            0x0B => RomRegion::China,
+            0x0C => RomRegion::Indonesia,
+            0x0D => RomRegion::SouthKorea,
+            0x0E => RomRegion::International,
+            0x0F => RomRegion::Canada,
+            0x10 => RomRegion::Brazil,
+            0x11 => RomRegion::Australia,
+            _ => RomRegion::None,
+        }
+    }
+}
+
+/// The decomposed values, out of header data.
 pub struct RomModeMapping {
-    mem_map: RomSize,
-    speed: RomClkSpeed,
-    cart_type: CartType,
-    region: RomRegion,
-    expansion_present: bool,
+    pub mem_map: RomSize,
+    pub speed: RomClkSpeed,
+    pub sram_size: u8,
+    pub region: RomRegion,
+    pub expansion: RomExpansions,
+    pub coproc: RomCoProcessor,
+    pub custom_coproc: CustomCoProcessor,
 }
 
 impl RomModeMapping {
@@ -229,9 +316,11 @@ impl RomModeMapping {
         Self {
             mem_map: RomSize::LoRom,
             speed: RomClkSpeed::SlowRom,
-            cart_type: CartType::ROMOnly,
-            region: RomRegion::Japan,
-            expansion_present: false,
+            sram_size: 0,
+            region: RomRegion::None,
+            expansion: RomExpansions::None,
+            coproc: RomCoProcessor::None,
+            custom_coproc: CustomCoProcessor::None,
         }
     }
 }
@@ -240,11 +329,11 @@ impl RomModeMapping {
 /// https://sneslab.net/wiki/SNES_ROM_Header
 /// Struct which contains header data and references to it for use externally.
 pub struct RomData {
-    header: Header,
-    opt_header: OptionalHeader,
-    exception_vectors: ExceptionVectorTable,
-    opt_is_present: bool,
-    mem_map: RomSize,
+    pub header: Header,
+    pub opt_header: OptionalHeader,
+    pub exception_vectors: ExceptionVectorTable,
+    pub opt_is_present: bool,
+    pub mode: RomModeMapping,
 }
 
 impl RomData {
@@ -255,7 +344,7 @@ impl RomData {
             opt_header: [0; OPT_HEADER_LEN_BYTES],
             exception_vectors: [0; EV_LEN_BYTES],
             opt_is_present: false,
-            mem_map: RomSize::LoRom,
+            mode: RomModeMapping::new(),
         }
     }
 }
@@ -284,14 +373,31 @@ impl Display for RomReadError {
 /// # Parameters:
 ///     - `path`:       Path to file to open
 ///     - `memory`:     Memory to prepare.
-pub fn load_rom(path: PathBuf, memory: &mut memory::Memory) -> Result<RomData, RomReadError> {
+pub fn load_rom(
+    path: PathBuf, memory: &mut memory::Memory, bypass_tests: bool,
+) -> Result<RomData, RomReadError> {
     // Attempt to read to buffer.
     let rom = read_rom_to_buf(path)?;
-    let mut data = fetch_header(&rom)?;
-    let _customProc = fetch_opt_header(&rom, &mut data);
-    fetch_exception_vectors(&rom, &mut data);
-    write_rom_to_memory(&rom, data.mem_map, memory).unwrap();
-    write_rom_mirror(&rom, data.mem_map, memory).unwrap();
+    let mut data = RomData::new();
+
+    if bypass_tests {
+        for offset in 0..rom.len() {
+            memory.put_byte(0x808000 + offset, rom[offset]);
+        }
+    }
+    else {
+        // Grab the header from the ROM and determine what size it is.
+        data = fetch_header(&rom)?;
+        fetch_opt_header(&rom, &mut data);
+        fetch_exception_vectors(&rom, &mut data);
+
+        // Decompose the header into more easily usable data.
+        populate_rom_mapping(&mut data)?;
+
+        // Write it into memory, and write the mirror.
+        write_rom_to_memory(&rom, data.mode.mem_map, memory)?;
+        write_rom_mirror(&rom, data.mode.mem_map, memory)?;
+    }
     Ok(data)
 }
 
@@ -355,7 +461,7 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
 fn write_rom_to_memory(
     rom: &Vec<u8>, mem_map: RomSize, mem_ptr: &mut memory::Memory,
 ) -> Result<(), RomReadError> {
-    let num_banks: usize;
+    let mut num_banks: usize;
     let bank_size: BankSize;
     let base_addr: usize;
     match mem_map {
@@ -530,22 +636,18 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
     const ROM_OPTIONS: [RomSize; ROM_SIZE_NUM] = [RomSize::ExHiRom, RomSize::HiRom, RomSize::LoRom];
     for size in ROM_OPTIONS.iter() {
         if rom.capacity() > *size as usize {
-            println!(
-                "{:?}: Slicing header from {:#08X} to {:#08X}",
-                size,
-                (*size as usize),
-                (*size as usize + HDR_LEN_BYTES)
-            );
             test_header.clone_from_slice(&rom[*size as usize..*size as usize + HDR_LEN_BYTES]);
 
             match test_checksum(checksum.0, &test_header) {
                 Ok(tested_size) => {
+                    let mut newmode = RomModeMapping::new();
+                    newmode.mem_map = tested_size;
                     return Ok(RomData {
                         header: test_header,
                         opt_header: [0; OPT_HEADER_LEN_BYTES],
                         exception_vectors: [0; EV_LEN_BYTES],
                         opt_is_present: false,
-                        mem_map: tested_size,
+                        mode: newmode,
                     });
                 }
                 Err(e) => {
@@ -564,9 +666,9 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 /// # Returns:
 ///     - `Some(CustomCoProcessor)`:    If the rom indicates coprocessor but not complete.
 ///     - `None`:                       Otherwise.
-fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) -> Option<CustomCoProcessor> {
+fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) {
     let header_addr: usize;
-    match &data.mem_map {
+    match &data.mode.mem_map {
         RomSize::LoRom => header_addr = LO_ROM_EXT_HEADER_ADDR,
         RomSize::HiRom => header_addr = HI_ROM_EXT_HEADER_ADDR,
         RomSize::ExHiRom => header_addr = EX_HI_ROM_EXT_HEADER_ADDR,
@@ -577,17 +679,65 @@ fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) -> Option<CustomCoProcess
         data.opt_header
             .clone_from_slice(&rom[header_addr..header_addr + OPT_HEADER_LEN_BYTES]);
     }
-    else if data.header[HDR_FIXED_VAL_INDEX] == HDR_SUBTYPE_PRESENT {
-        return match &rom[header_addr + OPT_SUB_CART_TYPE_INDEX] {
-            0x00 => Some(CustomCoProcessor::SPC7110),
-            0x01 => Some(CustomCoProcessor::ST010_11),
-            0x02 => Some(CustomCoProcessor::ST018),
-            0x03 => Some(CustomCoProcessor::CX4),
-            _ => None,
-        };
+}
+
+fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
+    // FIXME: clean up these magic numbers later.
+
+    if data.header[HDR_MAP_MODE_INDEX] & MAP_FASTROM_MASK != 0 {
+        data.mode.speed = RomClkSpeed::FastRom;
+    }
+    else {
+        data.mode.speed = RomClkSpeed::SlowRom;
     }
 
-    return None;
+    if data.header[HDR_DEST_CODE_INDEX] < RomRegion::None as u8 {
+        data.mode.region = RomRegion::from(data.header[HDR_DEST_CODE_INDEX]);
+    }
+
+    // Low 4 bits specify presence or absence
+    // https://snes.nesdev.org/wiki/ROM_header
+    match data.header[HDR_CART_TYPE_INDEX] & 0x0F {
+        // TODO: you cannot do (CartType::RomOnly as u8) even if you have set a #[repr(u8)] for the enum.
+        // Find a nicer way to match this (I really don't want to go back and make constants for enums that exist already).
+        0x00 => (), // ROM Only
+        0x01 | 0x02 => {
+            // 0x01: ROM + SRAM
+            // 0x02: ROM + SRAM + Battery (Presence of battery is unnecessary for us)
+            // Max is 7
+            data.mode.sram_size = (2usize.pow(data.header[HDR_RAM_SIZE_INDEX].into())) as u8;
+        }
+        0x03 => {
+            // Upper 4 bits specify type
+            let cart_type = (data.header[HDR_CART_TYPE_INDEX] & 0xF0) >> 4;
+            if cart_type < RomCoProcessor::None as u8 {
+                data.mode.coproc = RomCoProcessor::from(cart_type);
+            }
+
+            // If a custom is present, then figure out what it is.
+            if data.mode.coproc == RomCoProcessor::Custom {
+                if data.header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT
+                    || data.header[HDR_FIXED_VAL_INDEX] == HDR_SUBTYPE_PRESENT
+                {
+                    data.mode.custom_coproc =
+                        CustomCoProcessor::from(data.opt_header[OPT_SUB_CART_TYPE_INDEX]);
+                }
+            }
+        }
+        _ => {
+            return Err(RomReadError::new(
+                format!(
+                    "Cart type was invalid: {}",
+                    data.header[HDR_CART_TYPE_INDEX]
+                )
+                .to_string(),
+            ))
+        }
+    }
+
+    data.mode.expansion = RomExpansions::from(data.mode.coproc);
+
+    return Ok(());
 }
 
 /// Fetch the exception vector table from a rom.
@@ -596,7 +746,7 @@ fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) -> Option<CustomCoProcess
 ///     - `data`:   Pointer to RomData to populate.
 fn fetch_exception_vectors(rom: &Vec<u8>, data: &mut RomData) {
     let header_addr: usize;
-    match &data.mem_map {
+    match &data.mode.mem_map {
         RomSize::LoRom => header_addr = LO_ROM_EXC_VECTOR_ADDR,
         RomSize::HiRom => header_addr = HI_ROM_EXC_VECTOR_ADDR,
         RomSize::ExHiRom => header_addr = EX_HI_ROM_EXC_VECTOR_ADDR,
@@ -805,7 +955,7 @@ mod tests {
                 .unwrap();
         rand::thread_rng().fill_bytes(&mut *test_rom);
         let mut data: RomData = RomData::new();
-        data.mem_map = expected_type;
+        data.mode.mem_map = expected_type;
         data.header[HDR_FIXED_VAL_INDEX] = HDR_OPT_PRESENT;
 
         let header_location: usize;
@@ -831,7 +981,7 @@ mod tests {
                 .unwrap();
         rand::thread_rng().fill_bytes(&mut *test_rom);
         let mut data: RomData = RomData::new();
-        data.mem_map = expected_type;
+        data.mode.mem_map = expected_type;
 
         let header_location: usize;
         match expected_type {
@@ -847,41 +997,6 @@ mod tests {
                 test_rom[header_location + byte],
                 data.exception_vectors[byte]
             );
-        }
-    }
-
-    #[test]
-    fn test_fetch_optional_coprocessors() {
-        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
-        let mut test_rom: Box<[u8; LO_ROM_BANK_SIZE_BYTES]> = vec![0; LO_ROM_BANK_SIZE_BYTES]
-            .into_boxed_slice()
-            .try_into()
-            .unwrap();
-        rand::thread_rng().fill_bytes(&mut *test_rom);
-        let mut data: RomData = RomData::new();
-        data.header[HDR_FIXED_VAL_INDEX] = HDR_SUBTYPE_PRESENT;
-
-        for i in 0x00..=0x05 {
-            test_rom[LO_ROM_EXT_HEADER_ADDR + OPT_SUB_CART_TYPE_INDEX] = i as u8;
-            match i {
-                0x00 => assert_eq!(
-                    CustomCoProcessor::SPC7110,
-                    fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()
-                ),
-                0x01 => assert_eq!(
-                    CustomCoProcessor::ST010_11,
-                    fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()
-                ),
-                0x02 => assert_eq!(
-                    CustomCoProcessor::ST018,
-                    fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()
-                ),
-                0x03 => assert_eq!(
-                    CustomCoProcessor::CX4,
-                    fetch_opt_header(&test_rom.to_vec(), &mut data).unwrap()
-                ),
-                _ => assert!(fetch_opt_header(&test_rom.to_vec(), &mut data).is_none()),
-            }
         }
     }
 
@@ -924,7 +1039,10 @@ mod tests {
         test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX] = checksum.0.to_le_bytes()[0];
         test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX + 1] = checksum.0.to_le_bytes()[1];
 
-        assert_eq!(mem_map, fetch_header(&test_rom.to_vec()).unwrap().mem_map);
+        assert_eq!(
+            mem_map,
+            fetch_header(&test_rom.to_vec()).unwrap().mode.mem_map
+        );
     }
 
     #[test]
