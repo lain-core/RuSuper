@@ -58,3 +58,8 @@ Either the prefix `$` or `0x` is allowed wherever an address literal is found to
 - Load
     - TBD: Load sections of memory from a .bin file for analysis.
     - TBD; Load tags from an external file for re-use.
+
+## Project Status (5/16/24)
+CPU Implementation: 2 out of 255 opcodes
+
+Primary focus is: debugger implementation 
