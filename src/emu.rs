@@ -25,7 +25,6 @@ struct ClockState {
     master_clock_cycles_elapsed: usize,
     cpu_clock_cycles_elapsed: usize,
     ppu_clock_cycles_elapsed: usize,
-    // TODO: maybe more later.
 }
 
 impl ClockState {

@@ -1118,5 +1118,6 @@ mod tests {
         fetch_header_for_misaligned_rom(RomSize::LoRom, HALF_STEP * 6); // 3.0 MiB (2MiB + 1MiB)
                                                                         // 3.5 MiB is not a valid configuration.
                                                                         // TODO: The ExHiROM variants are as-yet untested, because the ExHiRom functionality is not present.
+                                                                        // https://github.com/HunterKing/RuSuper/issues/28
     }
 }
