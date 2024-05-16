@@ -1,9 +1,11 @@
-use super::VirtualMachine;
+use super::{utils::HexOperators, VirtualMachine};
 use crate::debugger::utils;
 use std::process::exit;
 
+/**************************************** Constant Values ***************************************************************/
 const NUM_ADDR_BYTES: usize = 3;
 
+/**************************************** File Scope Functions **********************************************************/
 /// Exits the program.
 pub fn dbg_exit(_args: Vec<&str>, _vm: &mut VirtualMachine) {
     exit(0);
@@ -33,7 +35,7 @@ pub fn dbg_print(args: Vec<&str>, vm: &mut VirtualMachine) {
         dbg_print_offset();
     }
     else {
-        match utils::string_to_hex(&token) {
+        match token.to_hex() {
             Ok(address) => dbg_print_absolute(address, vm),
             Err(_e) => {
                 println!("Error: {} was an invalid address value.", token);
@@ -73,3 +75,5 @@ fn dbg_print_absolute(address: usize, vm: &mut VirtualMachine) {
 fn dbg_print_offset() {
     println!("Unimplemented");
 }
+
+/**************************************** Tests *************************************************************************/
