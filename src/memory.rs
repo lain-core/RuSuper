@@ -1,5 +1,5 @@
-use core::fmt;
 use crate::romdata;
+use core::fmt;
 
 /**************************************** Constant Values ***************************************************************/
 const MEMORY_SIZE: usize = (0xFFFFFF) + 1;
@@ -11,7 +11,7 @@ pub const MEMORY_BANK_SIZE: usize = 0xFFFF; // Size of one memory bank.
 pub const MEMORY_BANK_INDEX: u8 = 16; // Bit index to shift a u8 by to obtain a bank address.
 
 /**************************************** Struct and Type definitions ***************************************************/
-//// Wrapper type for a u8 array which represents memory.
+/// Wrapper type for a u8 array which represents memory.
 type MemoryData = Box<[u8; MEMORY_SIZE]>;
 
 /// Struct for an Invalid Address or an index out of bounds.
@@ -89,7 +89,10 @@ impl Memory {
     ///     - `Ok(())`:                     If written OK.
     ///     - `InvalidAddressError(e)`:     If an invalid address was passed.
     pub fn put_bank(
-        &mut self, banktype: romdata::BankSize, address: usize, bankdata: &[u8],
+        &mut self,
+        banktype: romdata::BankSize,
+        address: usize,
+        bankdata: &[u8],
     ) -> Result<(), InvalidAddressError> {
         match address_is_valid(address + banktype as usize - 1) {
             Ok(_t) => {
@@ -114,7 +117,7 @@ impl Memory {
         match address_is_valid(address + 1) {
             Ok(_t) => {
                 self.memory[address] = word.to_le_bytes()[0];
-                self.memory[address+1] = word.to_le_bytes()[1];
+                self.memory[address + 1] = word.to_le_bytes()[1];
                 Ok(())
             }
             Err(e) => Err(e),
@@ -131,11 +134,9 @@ impl Memory {
     pub fn get_word(&self, address: usize) -> Result<u16, InvalidAddressError> {
         match address_is_valid(address + 1) {
             Ok(_t) => {
-                    let word_val: u16 = u16::from_le_bytes([
-                        self.memory[address],
-                        self.memory[address+1]
-                    ]);
-                    Ok((word_val).to_be())
+                let word_val: u16 =
+                    u16::from_le_bytes([self.memory[address], self.memory[address + 1]]);
+                Ok((word_val).to_be())
             }
             Err(e) => Err(e),
         }
@@ -196,7 +197,7 @@ mod tests {
 
     /**************************************** Unit Test Implementations *************************************************/
     /***** Byte Tests *****/
-    
+
     #[test]
     fn test_put_byte() {
         let mut memory_under_test = Memory::new();
