@@ -1,7 +1,6 @@
 use super::VirtualMachine;
 use std::process::exit;
 
-
 const NUM_ADDR_BYTES: usize = 3;
 
 #[derive(Debug, Clone)]
@@ -11,7 +10,9 @@ pub struct InvalidValueError {
 
 impl InvalidValueError {
     pub fn new(value: &str) -> Self {
-        Self { value: value.clone().to_owned() }
+        Self {
+            value: value.clone().to_owned(),
+        }
     }
 }
 
@@ -43,7 +44,7 @@ pub fn dbg_print(args: Vec<&str>, vm: &mut VirtualMachine) {
     if token.contains("+") {
         dbg_print_offset();
     }
-    else{
+    else {
         match string_to_hex(&token) {
             Ok(address) => dbg_print_absolute(address, vm),
             Err(_e) => {
@@ -54,19 +55,25 @@ pub fn dbg_print(args: Vec<&str>, vm: &mut VirtualMachine) {
 }
 
 fn dbg_print_absolute(address: usize, vm: &mut VirtualMachine) {
-    println!("Fetching value from address {:#08X}", address);
     let byte_value = vm.memory.get_byte(address);
     let word_value = vm.memory.get_word(address);
-    
+
     if byte_value.is_ok() {
-        print!("Byte Value: {:#04X} ", byte_value.unwrap()); 
+        print!(
+            "{:#08X}: {:#04X} ",
+            address,
+            byte_value.expect("Value was error despite checking")
+        );
     }
-    else{
+    else {
         print!("Byte Value: Invalid ")
     }
 
     if word_value.is_ok() {
-        print!("Word Value: {:#04X} ", word_value.unwrap());
+        print!(
+            "Word Value: {:#04X} ",
+            word_value.expect("Word value was error despite checking")
+        );
     }
     else {
         print!("Word Value: Invalid");
@@ -75,25 +82,70 @@ fn dbg_print_absolute(address: usize, vm: &mut VirtualMachine) {
     print!("\n");
 }
 
-fn dbg_print_offset(){
+fn dbg_print_offset() {
     println!("Unimplemented");
 }
 
 pub fn string_to_hex(mut value: &str) -> Result<usize, InvalidValueError> {
     if value.starts_with("$") {
-        value = value.strip_prefix("$").expect("String did not begin with $");
+        value = value
+            .strip_prefix("$")
+            .expect("String did not begin with $");
     }
     if value.starts_with("0x") {
-        value = value.strip_prefix("0x").expect("String did not begin with 0x");
+        value = value
+            .strip_prefix("0x")
+            .expect("String did not begin with 0x");
     }
 
-    let mut hex_value: usize = 0;
-    // TODO: calling to_bytes() returns an array of len 6 (each character = 1 byte). find a way to consume 2 characters into a value.
-    for value in 
+    if value.to_string().is_hex() {
+        let mut digits: Vec<u32> = vec![];
+        // Construct a list of hex digits for each char.
+        for char in value.chars() {
+            digits.push(
+                char.to_digit(16)
+                    .expect("Value was not hex despite checking"),
+            );
+        }
 
-    for addr in 0..bytes.len() {
-        hex_value |= (bytes[addr] as usize) << 8*addr;
+        let mut hex_value = 0;
+        let mut digits_iter = digits.iter();
+        for iters in 0..digits.len() {
+            hex_value |= (digits_iter.next().expect("Iterated past length of digits"))
+                << (((digits.len() - 1) - iters) * 4);
+        }
+        Ok(hex_value as usize)
     }
-    Ok(hex_value)
+    else {
+        Err(InvalidValueError::new(&format!(
+            "Value passed was not a valid hexidecimal number {}",
+            value
+        )))
+    }
+}
 
+pub trait IsValidHex {
+    fn is_hex(&self) -> bool;
+}
+
+impl IsValidHex for String {
+    fn is_hex(&self) -> bool {
+        for char in self.chars() {
+            if !char.is_digit(16) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+impl IsValidHex for &str {
+    fn is_hex(&self) -> bool {
+        for char in self.chars() {
+            if !char.is_digit(16) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
