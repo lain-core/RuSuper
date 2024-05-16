@@ -9,6 +9,7 @@ use crate::romdata;
 
 mod breakpoints;
 mod misc;
+mod utils;
 
 /*******
  * Brainstorming: command ideas:
@@ -240,12 +241,12 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
         (DebugCommandTypes::Exit, Box::new(misc::dbg_exit) as DebugFn),
         (
             DebugCommandTypes::Break,
-            Box::new(breakpoints::dbg_breakpoint) as DebugFn
+            Box::new(breakpoints::dbg_breakpoint) as DebugFn,
         ),
         (
             DebugCommandTypes::Print,
-            Box::new(misc::dbg_print) as DebugFn
-        )
+            Box::new(misc::dbg_print) as DebugFn,
+        ),
     ])
 }
 
