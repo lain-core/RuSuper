@@ -1,27 +1,24 @@
-use crate::{memory, romdata};
-use std::time;
+use crate::memory;
 
-// Instructions mod declarations
-
-// Generalized ASM Help: https://ersanio.gitbook.io/assembly-for-the-snes
-// SFC Dev Wiki: https://wiki.superfamicom.org/learning-65816-assembly
-// ASAR Docs: https://rpghacker.github.io/asar/asar_2_beta/arch-65816.html
 mod branch;
 mod misc;
 
-/***** Instruction/Ops related constants *****/
-const NUM_INSTRUCTIONS: usize = 256;
+/**************************************** Constant Values ***************************************************************/
 /// Number of instructions
-const INST_PARAM_OFFSET: u16 = 1;
-/// Parameter for an offset is always instruction + 1.
+const NUM_INSTRUCTIONS: usize = 256;
 
-/*  Number of bytes to increment the PC by for an instruction. */
-const PC_INCREMENT_NO_ARG: u16 = 1;
+/// Parameter for an offset is always instruction + 1.
+const INST_PARAM_OFFSET: u16 = 1;
+
+/// Number of bytes to increment the PC by for an instruction.
 /// Instruction is only one byte long.
-const PC_INCREMENT_SHORT_ARG: u16 = 2;
+const PC_INCREMENT_NO_ARG: u16 = 1;
+
 /// Instruction takes an 8-bit parameter.
-const PC_INCREMENT_LONG_ARG: u16 = 3;
+const PC_INCREMENT_SHORT_ARG: u16 = 2;
+
 /// Instruction takes a  16-bit parameter.
+const PC_INCREMENT_LONG_ARG: u16 = 3;
 
 /// Map of the cpu opcodes.
 /// Would prefer this to be a hashmap, but rust cannot generate a HashMap::From() as const, and a global cannot be declared using `let`.
@@ -1308,10 +1305,9 @@ const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
     }, /* 0xFF */
 ];
 
-/***** Implementation of enums and structures for CPU *****/
+/**************************************** Struct and Type definitions ***************************************************/
 
 /// Enumerated type to match to an opcode. Useful for debugging because it can be represented easily as a string.
-/// https://wiki.superfamicom.org/65816-reference
 #[derive(Debug, Clone, Copy)]
 pub enum CpuOpcode {
     STP,
@@ -1331,31 +1327,34 @@ enum CpuParamWidth {
     LONG = PC_INCREMENT_LONG_ARG,
 }
 
+/// Generalized function signature for CPU Instruction functions.
+/// Takes modifiable CPU State, Memory, and 16-bit parameter (widened if u8).
+type CpuInstructionFn = fn(&mut CpuState, &mut memory::Memory, u16) -> bool;
+
 /// A conglomerate wrapper of the prior enums.
-///     - `opcode`      Opcode of next operation
+///     - `opcode`      Opcode of next operation to run.
 ///     - `width`       Width of next operation, to calculate parameters.
 ///     - `function`    Function pointer to handler for next operation.
 #[derive(Debug, Clone, Copy)]
 struct CpuInstruction {
     opcode: CpuOpcode,
     width: CpuParamWidth,
-    function: fn(&mut CpuState, &mut memory::Memory, u16) -> bool,
+    function: CpuInstructionFn,
 }
 
 /// Virtualized representation of the CPU internally.
 #[derive(Debug)]
 pub struct CpuState {
-    acc: u16,               // Accumulator TODO: Union this
+    acc: u16,               // Accumulator
     pc: u16,                // Program Counter
     sp: u16,                // Stack Pointer
-    flags: u8,              // Flags TODO: this should be a union of bits
-    direct_page: u16,       // Direct page addressing offset
-    data_bank: u8,          // Reference to current data bank addr
-    prog_bank: u8,          // Reference to current bank of instr
+    flags: u8,              // Flags
+    direct_page: u16,       // Direct page addressing offset (Lower 4 bytes of address)
+    data_bank: u8,          // Reference to current data bank addr (Upper 2 bytes of address)
+    prog_bank: u8,          // Reference to current bank of instr (Upper 2 bytes of address)
     pub cycles_to_pend: u8, // Number of cycles to pend before running next operation.
 }
 
-/* Associated Functions */
 impl CpuState {
     /// Return a new blank CpuState instance.
     pub const fn new() -> Self {
@@ -1371,12 +1370,13 @@ impl CpuState {
         }
     }
 
-    /// Fetch, Decode, Execute the next instruction, and return false if we encountered a HALT.
+    /// Fetch, Decode, Execute the next instruction, and return false if the VM needs to stop running.
     /// # Parameters
+    ///     - `self`
     ///     - `memory`: Mutable pointer to current memory state.
     /// # Returns
-    ///     - `true` if running,
-    ///     - `false` if run should halt.
+    ///     - `true`:    If running,
+    ///     - `false`:   If run should halt.
     pub fn step(&mut self, mut mem: &mut memory::Memory) -> bool {
         let next_instruction = self.fetch_and_decode(&mem);
         self.execute(next_instruction, &mut mem)
@@ -1387,6 +1387,8 @@ impl CpuState {
     /// # Parameters
     ///     - `self`
     ///     - `memory`: Pointer to memory object to read data from.
+    /// # Returns
+    ///     - `CpuInstruction`:     Decoded CPU instruction from the hash table.
     fn fetch_and_decode(&self, p_mem: &memory::Memory) -> CpuInstruction {
         let address = memory::compose_address(self.prog_bank, self.pc);
         INSTRUCTION_MAP[p_mem.get_byte(address).unwrap() as usize]
@@ -1398,14 +1400,14 @@ impl CpuState {
     ///     - `inst`    Instruction struct containing all relevant information about an operation.
     ///     - `p_mem`   Mutable pointer to the memory for this instance.
     /// # Returns
-    ///     - true      If continuing running
-    ///     - false     If a BRK or STP has been reached.
+    ///     - true:      If continuing running
+    ///     - false:     If a BRK or STP has been reached.
     fn execute(&mut self, inst: CpuInstruction, mut p_mem: &mut memory::Memory) -> bool {
         let continue_run: bool;
         let parameter_location: usize =
             memory::compose_address(self.prog_bank, self.pc + INST_PARAM_OFFSET);
-        let parameter_value: u16; // Calculated parameter value, if applicable.
-        let pc_addr_increment: u16 = inst.width as u16; // Number of bytes to increment the PC by after this operation.
+        let parameter_value: u16;
+        let pc_addr_increment: u16 = inst.width as u16;
 
         match inst.width {
             CpuParamWidth::NO => parameter_value = 0,
@@ -1431,14 +1433,6 @@ impl CpuState {
         );
     }
 }
+/**************************************** File Scope Functions **********************************************************/
 
-
-
-/***** File scope functions *****/
-
-/***** Tests *****/
-#[cfg(test)]
-mod tests {
-    use self::memory::Memory;
-    use super::*;
-}
+/**************************************** Tests *************************************************************************/

@@ -7,40 +7,7 @@ use std::{
     collections::HashMap,
     io::{self, Write},
 };
-
-/*******
- * Brainstorming: command ideas:
- *  - h             help
- *  - help          help
- *  - tag $XXXXXX   Assign variable name to address 0xXXXXXX
- *  - b             Set breakpoint at current PC
- *      - b +N          Set breakpoint at memory address PC + N
- *      - b $XXXXXX     Set breakpoint at absolute address 0xXXXXXX
- *      - b tag
- *      - b tag+N
- *      - b show        Show breakpoints
- *      - b del X       Delete breakpoint X
- *  - r             Run until breakpoint or termination
- *      - c             alias for R
- *  - s             Step 1 instruction
- *      - s N           Step N instructions
- *      - s tag         Continue running until target tag is reached.
- *  - w $XXXXXX     Watch value, break on modification at 0xXXXXXX
- *      - w tag         Watch value, break on modification at tag
- *  - pb $XXXXXX  Print byte value at absolute address $XXXXXX
- *      - pb tag      ""
- *      - pw $XXXXXX  Print word value at absolute address $XXXXXX
- *      - pw tag      ""
- *  - dump  Dump current state (all sub-options) to working dir.
- *      - dump loram    Dump memory from 0x000000 - 0x3F1FFF+0x7E0000 - 0x7E1FFF (SNES LoRAM) to loram.bin in working dir.
- *      - dump ppu      Dump memory from 0x002000 - 0x3F3FFF (SNES PPU/APU) to apu.bin in working dir.
- *      - dump controller   Dump Memory from 0x004000 - 0x3F41FF to controller.bin
- *      - dump cpu          Dump memory from 0x004200 - 0x3F5FFF to cpu.bin
- *      - dump expansion    Dump memory from 0x006000 - 0x3F7FFF to expansion.bin
- *      - dump ram          Dump memory from 0x7E0000 - 0x7FFFFF to ram.bin (includes slice of loram)
- *      - dump tags         Dump tags to tags.txt (tags.toml?)
- *      - dump b            Dump breakpoints to breakpoints.txt (breakpoints.toml?). Include tags if possible
- */
+/**************************************** Struct and Type definitions ***************************************************/
 
 /// Struct to track the operation of the debugger.
 struct DebuggerState {
@@ -117,6 +84,7 @@ impl From<&str> for TokenSeparators {
 
 type DebugFn = Box<dyn Fn(Vec<&str>, &mut VirtualMachine)>;
 
+/**************************************** File Scope Functions **********************************************************/
 fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
     HashMap::from([
         (DebugCommandTypes::Help, Box::new(misc::dbg_help) as DebugFn),
@@ -175,3 +143,5 @@ pub fn run(mut vm: VirtualMachine) {
         }
     }
 }
+
+/**************************************** Tests *************************************************************************/

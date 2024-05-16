@@ -1,163 +1,18 @@
+use crate::romdata;
 use core::fmt;
 
-use crate::romdata;
-/* https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map */
-
-const MEMORY_SIZE: usize = (0xFFFFFF) + 1; // Total memory is addressable from 0x000000 - 0xFFFFFF
+/**************************************** Constant Values ***************************************************************/
+const MEMORY_SIZE: usize = (0xFFFFFF) + 1;
 pub const MEMORY_START: usize = 0x000000;
-pub const MEMORY_END: usize = 0xFFFFFF; // Memory commonly ends at bank $7F https://ersanio.gitbook.io/assembly-for-the-snes/the-fundamentals/memory
+pub const MEMORY_END: usize = 0xFFFFFF;
 pub const MEMORY_BANK_COUNT: usize = 0xFF; // Number of addressable memory banks.
 pub const MEMORY_BANK_START: usize = 0x0000;
 pub const MEMORY_BANK_SIZE: usize = 0xFFFF; // Size of one memory bank.
 pub const MEMORY_BANK_INDEX: u8 = 16; // Bit index to shift a u8 by to obtain a bank address.
 
+/**************************************** Struct and Type definitions ***************************************************/
+/// Wrapper type for a u8 array which represents memory.
 type MemoryData = Box<[u8; MEMORY_SIZE]>;
-
-/// Structure to represent memory.
-/// Really just a wrapper for an array; we are doing this to avoid implementing file-scope global state.
-pub struct Memory {
-    memory: MemoryData,
-}
-
-impl Memory {
-    /// Creates a new instance of a Memory object, with all addresses initialized to 0.
-    pub fn new() -> Self {
-        Memory {
-            // https://github.com/rust-lang/rust/issues/53827
-            memory: vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap(),
-        }
-    }
-
-    /// Visually dump a bank to stdout.
-    /// # Parameters
-    ///     - `self`:           Pointer to object containing memory to dump.
-    ///     - `target_bank`:    Target bank to print to screen.
-    pub fn dump_bank(&self, target_bank: u8) {
-        println!(
-            "        0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0A 0x0B 0x0C 0x0D 0x0E 0x0F"
-        );
-        let bank_index: usize = (target_bank as usize) << MEMORY_BANK_INDEX;
-
-        for row_index in 0..(MEMORY_BANK_SIZE + 1) {
-            let byte_index = bank_index | row_index;
-            let byte_value = &self.memory[byte_index];
-
-            if byte_index % 0x10 == 0 {
-                // Stupid: The width specifier for hex formatting applies to the leading "0x" also; all widths must be +2.
-                print!("\n{:#06X}: [", byte_index);
-                print!(" {:#04X}, ", byte_value);
-            }
-            else if byte_index % 0x10 == 0x0F {
-                print!("{:#04X} ]", byte_value);
-            }
-            else {
-                print!("{:#04X}, ", byte_value);
-            }
-        }
-    }
-
-    /// Return one byte from memory.
-    /// # Parameters:
-    ///     - `self`: Pointer to memory object which contains memory to read from.
-    ///     - `address`: Address of byte to fetch.
-    /// # Returns:
-    ///     - `Ok(value)`   If the argument was valid
-    ///     - `Err(e)`      If the arument was invalid
-    pub fn get_byte(&self, address: usize) -> Result<u8, InvalidAddressError> {
-        match address_is_valid(address) {
-            Ok(_t) => Ok(self.memory[address]),
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Put a byte into memory.
-    /// # Parameters:
-    ///     - `self`:       Pointer to mutable memory object to write word into.
-    ///     - `address`:    Location in memory to write to.
-    ///     - `byte`:       LE-encoded byte to write.
-    /// # Returns:
-    ///     - `Ok(())`:                     If OK
-    ///     - `InvalidAddressError`:    If an invalid address was passed.
-    pub fn put_byte(&mut self, address: usize, byte: u8) -> Result<(), InvalidAddressError> {
-        match address_is_valid(address) {
-            Ok(_t) => {
-                self.memory[address] = byte;
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Write an entire bank into memory.
-    /// # Parameters:
-    ///     - `self`
-    ///     - `banktype`:       The size of a rom, used to determine the bank length
-    ///     - `address`:        Start addres to write this bank from.
-    ///     - `bankdata`:       Data to write to target bank.
-    /// # Returns
-    ///     - `Ok(())`:         If written OK.
-    ///     
-    pub fn put_bank(
-        &mut self, banktype: romdata::BankSize, address: usize, bankdata: &[u8],
-    ) -> Result<(), InvalidAddressError> {
-        match address_is_valid(address + banktype as usize - 1) {
-            Ok(_t) => {
-                println!("Writing bank starting at {:#08X}", address);
-                for offset in 0..banktype as usize - 1 {
-                    self.memory[address + offset] = bankdata[offset];
-                }
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Put a big endian word into memory.
-    /// # Parameters:
-    ///     - `self`:       Pointer to mutable memory object to write word into.
-    ///     - `address`:    Byte address location in memory to write to (for byte 0).
-    ///     - `word`:       Word to write.
-    /// # Returns:
-    ///     - `Ok(())`:                  if OK
-    ///     - `InvalidAddressError`: if an invalid address is passed in.
-    pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), InvalidAddressError> {
-        match address_is_valid(address + 1) {
-            Ok(_t) => {
-                unsafe {
-                    let word_ptr: *mut u16 = self
-                        .memory
-                        .as_mut_slice()
-                        .as_mut_ptr()
-                        .add(address)
-                        .cast::<u16>();
-                    *word_ptr = word;
-                }
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Fetch a word from memory in
-    /// # Parameters:
-    ///     - `self`: Pointer to memory object which contains memory to read from.
-    ///     - `address`: Address of byte to fetch.
-    /// # Returns:
-    ///     - `Ok(value)`   If the argument was valid
-    ///     - `Err(e)`      If the arument was invalid
-    pub fn get_word(&self, address: usize) -> Result<u16, InvalidAddressError> {
-        match address_is_valid(address + 1) {
-            Ok(_t) => {
-                    let word_val: u16 = u16::from_le_bytes([
-                        self.memory[address],
-                        self.memory[address+1]
-                    ]);
-                    Ok((word_val).to_be())
-            }
-            Err(e) => Err(e),
-        }
-    }
-}
 
 /// Struct for an Invalid Address or an index out of bounds.
 #[derive(Debug, Clone)]
@@ -177,7 +32,118 @@ impl fmt::Display for InvalidAddressError {
     }
 }
 
-/***** File-scope functions *****/
+/// Structure to represent memory.
+/// Really just a wrapper for an array.
+pub struct Memory {
+    memory: MemoryData,
+}
+
+impl Memory {
+    /// Creates a new instance of a Memory object, with all addresses initialized to 0.
+    pub fn new() -> Self {
+        Memory {
+            // https://github.com/rust-lang/rust/issues/53827
+            memory: vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap(),
+        }
+    }
+
+    /// Return one byte from memory.
+    /// # Parameters:
+    ///     - `self`: Pointer to memory object which contains memory to read from.
+    ///     - `address`: Address of byte to fetch, as a fully assembled absolute address.
+    /// # Returns:
+    ///     - `Ok(value)`                   If OK, the byte as a wrapped u8.
+    ///     - `InvalidAddressError(e)`      If an invalid address was passed.
+    pub fn get_byte(&self, address: usize) -> Result<u8, InvalidAddressError> {
+        match address_is_valid(address) {
+            Ok(_t) => Ok(self.memory[address]),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Put a byte into memory.
+    /// # Parameters:
+    ///     - `self`:       Pointer to mutable memory object to write byte into.
+    ///     - `address`:    Location in memory to write to, as a fully assembled absolute address.
+    ///     - `byte`:       Byte to write.
+    /// # Returns:
+    ///     - `Ok(())`:                     If OK.
+    ///     - `InvalidAddressError(e)`:     If an invalid address was passed.
+    pub fn put_byte(&mut self, address: usize, byte: u8) -> Result<(), InvalidAddressError> {
+        match address_is_valid(address) {
+            Ok(_t) => {
+                self.memory[address] = byte;
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Write an entire bank into memory.
+    /// # Parameters:
+    ///     - `self`
+    ///     - `banktype`:       The size of a rom, used to determine the bank length.
+    ///     - `address`:        Start address to write this bank from, as an absolute address.
+    ///     - `bankdata`:       Data to write to target bank.
+    /// # Returns
+    ///     - `Ok(())`:                     If written OK.
+    ///     - `InvalidAddressError(e)`:     If an invalid address was passed.
+    pub fn put_bank(
+        &mut self,
+        banktype: romdata::BankSize,
+        address: usize,
+        bankdata: &[u8],
+    ) -> Result<(), InvalidAddressError> {
+        match address_is_valid(address + banktype as usize - 1) {
+            Ok(_t) => {
+                for offset in 0..banktype as usize - 1 {
+                    self.memory[address + offset] = bankdata[offset];
+                }
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Put a big endian word into memory.
+    /// # Parameters:
+    ///     - `self`:       Pointer to mutable memory object to write word into.
+    ///     - `address`:    Absolute address location in memory to write to (for byte 0).
+    ///     - `word`:       Word to write.
+    /// # Returns:
+    ///     - `Ok(())`:                     If OK.
+    ///     - `InvalidAddressError`:        If an invalid address was passed.
+    pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), InvalidAddressError> {
+        match address_is_valid(address + 1) {
+            Ok(_t) => {
+                self.memory[address] = word.to_le_bytes()[0];
+                self.memory[address + 1] = word.to_le_bytes()[1];
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Fetch a word from memory in Big Endian format, for readability.
+    /// # Parameters:
+    ///     - `self`:       Pointer to memory object which contains memory to read from.
+    ///     - `address`:    Absolute address of byte to fetch.
+    /// # Returns:
+    ///     - `Ok(value)`   If OK, the word as a wrapped u16.
+    ///     - `Err(e)`      If an invalid address was passed.
+    pub fn get_word(&self, address: usize) -> Result<u16, InvalidAddressError> {
+        match address_is_valid(address + 1) {
+            Ok(_t) => {
+                let word_val: u16 =
+                    u16::from_le_bytes([self.memory[address], self.memory[address + 1]]);
+                Ok((word_val).to_be())
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/**************************************** File Scope Functions **********************************************************/
 
 /// Given an 8-bit bank reference and a 16-bit address within that bank, return the composed address that points to.
 /// # Parameters:
@@ -189,12 +155,12 @@ pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
     ((bank as usize) << MEMORY_BANK_INDEX) | byte_addr as usize
 }
 
-/// Checks if an address is within range.
+/// Checks if an address is within memory range (0x000000 - 0xFFFFFF).
 /// # Parameters:
-///     - `address`     An address to test.
+///     - `address`     Address to test.
 /// # Returns:
-///     - `Ok(true)` for a valid address
-///     - `InvalidAddressError(address)` for an invalid address
+///     - `Ok(true)`                        For a valid address.
+///     - `InvalidAddressError(address)`    For an invalid address (>= 0xFFFFFF).
 pub fn address_is_valid(address: usize) -> Result<(), InvalidAddressError> {
     if address < MEMORY_SIZE {
         Ok(())
@@ -205,18 +171,13 @@ pub fn address_is_valid(address: usize) -> Result<(), InvalidAddressError> {
     }
 }
 
-pub fn convert_bank_addr(bank_addr: u8) -> usize {
-    (bank_addr as usize) << MEMORY_BANK_INDEX
-}
-
-/***** Tests *****/
+/**************************************** Tests *************************************************************************/
 #[cfg(test)]
 mod tests {
-    use crate::memory;
-
     use super::*;
     use rand::{Rng, RngCore};
 
+    /**************************************** Test Helpers **************************************************************/
     /// Given a memory ptr fill it with random test data, and return the random test data it was filled from.
     /// # Parameters:
     ///     - `memory_under_test`:      Memory to fill.
@@ -233,6 +194,9 @@ mod tests {
 
         random_data
     }
+
+    /**************************************** Unit Test Implementations *************************************************/
+    /***** Byte Tests *****/
 
     #[test]
     fn test_put_byte() {
@@ -274,6 +238,7 @@ mod tests {
         let _ = &memory_under_test.get_byte(MEMORY_SIZE).unwrap();
     }
 
+    /***** Word Tests *****/
     #[test]
     fn test_put_word() {
         let mut memory_under_test: Memory = Memory::new();
@@ -321,6 +286,7 @@ mod tests {
             .try_into()
             .unwrap();
 
+        // Quick sanity check to make sure our get_word() gives back a BE value.
         memory_under_test.memory[0] = 0xAA;
         memory_under_test.memory[1] = 0xBB;
         assert_eq!(memory_under_test.get_word(0x000000).unwrap(), 0xAABB);

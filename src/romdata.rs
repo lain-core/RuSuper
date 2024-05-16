@@ -1,12 +1,11 @@
 #![allow(unused)]
-// There are a lot of currently unused const values in this file, but they are important to structural understanding
-//  and may become more useful in the future. This is disabled while still implementing functions.
+// There are a lot of currently unused const values in this file, but they are important to structural understanding, and may be used elsewhere in the future.
 
+use crate::memory::{self, compose_address};
 use core::fmt;
 use std::{fmt::Display, fs, io::Read, num::Wrapping, path::PathBuf};
 
-use crate::memory::{self, compose_address};
-
+/**************************************** Constant Values ***************************************************************/
 /********************************* ROM Info Constants **************************************************/
 
 /// Layout in memory is low->high [Optional Header, Header, Exception Vectors]. Always lives at the end of the first bank of a ROM.
@@ -114,16 +113,17 @@ const MAP_EXHIROM_MASK: u8 = 0b00000100;
 // Unused Bit                                0b00001000
 const MAP_FASTROM_MASK: u8 = 0b00010000;
 const MAP_BASE_MASK: u8 = 0b00100000;
+
 /// Public constants
 pub const ROM_BASE_ADDR: u16 = 0x8000; // All LoRom banks, and mirrored banks of both Lo and HiRom fall under $XX8000. E.G.: Bank 0: $808000, Bank 1: $908000
 pub const TOTAL_HDR_BYTES: usize = OPT_HEADER_LEN_BYTES + HDR_LEN_BYTES + EV_LEN_BYTES;
 
-/********************************* ROM Info Enums & Struct Definitions *********************************/
+/**************************************** Struct and Type definitions ***************************************************/
 type Header = [u8; HDR_LEN_BYTES];
 type OptionalHeader = [u8; OPT_HEADER_LEN_BYTES];
 type ExceptionVectorTable = [u8; EV_LEN_BYTES];
 
-/// Info pertaining to the memory map and size of the ROM.
+/// Memory map and size of the ROM.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(usize)]
 pub enum RomSize {
@@ -131,9 +131,9 @@ pub enum RomSize {
     HiRom = HI_ROM_HEADER_ADDR,
     ExHiRom = EX_HI_ROM_HEADER_ADDR,
 }
-const ROM_SIZE_NUM: usize = 3; // You cannot enumerate an enum in rust without an additional library
+const ROM_SIZE_NUM: usize = 3;
 
-/// Info pertaining to a rom bank size.
+/// Rom bank size.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(usize)]
 pub enum BankSize {
@@ -141,16 +141,14 @@ pub enum BankSize {
     Hi = HI_ROM_BANK_SIZE_BYTES,
 }
 
-/// Info pertaining to the CPU clock speed the SNES runs at for this ROM.
-/// SlowRom = 2.68MHz
-/// FastRom = 3.58MHz
+/// CPU clock speed the SNES runs at for this ROM.
 #[derive(Debug, Clone, Copy)]
 pub enum RomClkSpeed {
     SlowRom, // 2.68MHz
     FastRom, // 3.58MHz
 }
 
-/// ROM Expansion chips which are noted and affect memory map.
+/// ROM Expansion chips which affect memory map.
 /// Note that SuperFX and others have their own memory map which is not covered by this.
 #[derive(Debug, Clone, Copy)]
 pub enum RomExpansions {
@@ -169,8 +167,8 @@ impl From<RomCoProcessor> for RomExpansions {
     }
 }
 
-/// Cart type doesn't really map linearly, which is kind of a headache.
-#[derive(Debug, Clone, Copy)]
+/// Hardware present on cartridge for this rom.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CartType {
     ROMOnly = 0x00,
@@ -182,6 +180,7 @@ pub enum CartType {
     ROMCoCpuBattery = 0x06,
     None = 0x07,
 }
+const CART_TYPE_MASK: u8 = 0x0F;
 
 impl From<u8> for CartType {
     fn from(value: u8) -> Self {
@@ -198,6 +197,7 @@ impl From<u8> for CartType {
     }
 }
 
+/// Any additional coprocessing hardware included in a ROM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RomCoProcessor {
@@ -211,6 +211,7 @@ pub enum RomCoProcessor {
     Custom = 0x0F,
     None,
 }
+const ROM_COPROCESSOR_MASK: u8 = 0xF0;
 
 impl From<u8> for RomCoProcessor {
     fn from(value: u8) -> Self {
@@ -228,6 +229,8 @@ impl From<u8> for RomCoProcessor {
     }
 }
 
+/// When the CoProcessor is set to "Custom", the custom type is found in the optional header.
+/// These are chips that were developed by third parties at the time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CustomCoProcessor {
@@ -250,6 +253,7 @@ impl From<u8> for CustomCoProcessor {
     }
 }
 
+/// Region Target for the ROM.
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum RomRegion {
@@ -300,7 +304,7 @@ impl From<u8> for RomRegion {
     }
 }
 
-/// The decomposed values, out of header data.
+/// Header data parsed out into enumerated types.
 pub struct RomModeMapping {
     pub mem_map: RomSize,
     pub speed: RomClkSpeed,
@@ -325,9 +329,7 @@ impl RomModeMapping {
     }
 }
 
-/// https://snes.nesdev.org/wiki/ROM_header#Header_Verification
-/// https://sneslab.net/wiki/SNES_ROM_Header
-/// Struct which contains header data and references to it for use externally.
+/// Struct which contains copies of header data and references to it.
 pub struct RomData {
     pub header: Header,
     pub opt_header: OptionalHeader,
@@ -349,15 +351,25 @@ impl RomData {
     }
 }
 
-/// Struct for a RomReadError if an error occurred on parse.
+/// Error which is returned if a ROM fails to be parsed for any reason.
 #[derive(Debug, Clone)]
 pub struct RomReadError {
     context: String,
 }
 
-impl RomReadError {
-    pub fn new(ctx: String) -> Self {
-        Self { context: ctx }
+impl From<&str> for RomReadError {
+    fn from(value: &str) -> Self {
+        Self {
+            context: value.to_string().clone(),
+        }
+    }
+}
+
+impl From<String> for RomReadError {
+    fn from(value: String) -> Self {
+        Self {
+            context: value.clone(),
+        }
     }
 }
 
@@ -367,14 +379,22 @@ impl Display for RomReadError {
     }
 }
 
-/********************************* ROM Info Functions **************************************************/
+/**************************************** File Scope Functions **********************************************************/
 
-/// Perform all of the startup operations and fetch all the data necessary before runtime.
+/// Validate the ROM, extract data from the header, and load into memory.
 /// # Parameters:
-///     - `path`:       Path to file to open
-///     - `memory`:     Memory to prepare.
+///     - `path`:           Path to file to open.
+///     - `memory`:         Memory to prepare.
+///     - `bypass_tests`:   Whether to skip header validation.
+///         This is a dangerous flag, because header information contains critical data about the rom and it's features.
+///         Only used for small ASM test roms which do not contain a correct header.
+/// # Returns:
+///     - `Ok(RomData)`:        If the ROM checksum was valid and data could be parsed, return all of the relevant data.
+///     - `RomReadError(e)`:    If any failure parsing the rom occurred.
 pub fn load_rom(
-    path: PathBuf, memory: &mut memory::Memory, bypass_tests: bool,
+    path: PathBuf,
+    memory: &mut memory::Memory,
+    bypass_tests: bool,
 ) -> Result<RomData, RomReadError> {
     // Attempt to read to buffer.
     let rom = read_rom_to_buf(path)?;
@@ -382,11 +402,14 @@ pub fn load_rom(
 
     if bypass_tests {
         for offset in 0..rom.len() {
-            memory.put_byte(0x808000 + offset, rom[offset]);
+            memory.put_byte(
+                memory::compose_address(LO_ROM_BANK_ADDR, ROM_BASE_ADDR) + offset,
+                rom[offset],
+            );
         }
     }
     else {
-        // Grab the header from the ROM and determine what size it is.
+        // Grab the header from the ROM to determine what size it is.
         data = fetch_header(&rom)?;
         fetch_opt_header(&rom, &mut data);
         fetch_exception_vectors(&rom, &mut data);
@@ -394,14 +417,14 @@ pub fn load_rom(
         // Decompose the header into more easily usable data.
         populate_rom_mapping(&mut data)?;
 
-        // Write it into memory, and write the mirror.
+        // Write ROM into memory, and then write the mirror.
         write_rom_to_memory(&rom, data.mode.mem_map, memory)?;
         write_rom_mirror(&rom, data.mode.mem_map, memory)?;
     }
     Ok(data)
 }
 
-/// Check file, attempt to read, and then discern information about it. If possible, populate the memory.
+/// Check file, and attempt to read it into a buffer.
 /// # Parameters:
 ///     - `path`:       Path to file to open.
 /// # Returns:
@@ -410,14 +433,12 @@ pub fn load_rom(
 fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
     let retval: Result<Vec<u8>, RomReadError>;
 
-    // Check and just immediatelyVirtualMachine flop if an SMC is passed until we manage that.
+    // Check and just immediately flop if an SMC is passed until we manage that.
     if path.extension().unwrap() == "smc" {
-        return Err(RomReadError::new(
-            format!("SMC files contain additional data that is unneeded.\nThis tool does not support them yet. Please use an SFC file.").to_string()
+        return Err(RomReadError::from(
+            "SMC files contain additional data that is unneeded.\nThis tool does not support them yet. Please use an SFC file"
         ));
     }
-
-    // Attempt to open the file, and load it into a buffer.
     let file = fs::File::open(&path);
 
     if file.is_ok() {
@@ -428,38 +449,38 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
                     retval = Ok(buf);
                 }
                 else {
-                    retval = Err(RomReadError::new("Rom was size 0".to_string()));
+                    retval = Err(RomReadError::from("Rom was of length 0"));
                 }
             }
             Err(e) => {
-                retval = Err(RomReadError::new(format!("Failed to read file: {}", e)));
+                retval = Err(RomReadError::from(format!("Failed to read file: {}", e)));
             }
         };
     }
     else {
-        retval = Err(RomReadError::new(format!(
+        retval = Err(RomReadError::from(format!(
             "Failed to open file at {}",
             &path.display()
         )));
     }
 
-    // If the file was read successfully, operate on it.
-
     retval
 }
 
-/// Actually place the rom into `memory`.
+/// Actually place the rom into memory.
 /// https://snes.nesdev.org/wiki/Memory_map
 ///
 /// # Parameters:
-///     - `rom`:        Pointer to the ROM to read.
-///     - `mem_map`:    Size of the rom, used to where to place the ROM.
-///     - `mem_ptr`:    Pointer to memory to populate.
+///     - `rom`:        Data from the ROM to use.
+///     - `mem_map`:    Size of the rom, used to locate where to place the ROM.
+///     - `mem_ptr`:    Mutable pointer to memory to populate.
 /// # Returns:
 ///     - `Ok()`:           If file wrote successfully,
 ///     - `RomReadError`:   If an error ocurred in the process.
 fn write_rom_to_memory(
-    rom: &Vec<u8>, mem_map: RomSize, mem_ptr: &mut memory::Memory,
+    rom: &Vec<u8>,
+    mem_map: RomSize,
+    mem_ptr: &mut memory::Memory,
 ) -> Result<(), RomReadError> {
     let mut num_banks: usize;
     let bank_size: BankSize;
@@ -467,10 +488,13 @@ fn write_rom_to_memory(
     match mem_map {
         RomSize::ExHiRom => {
             // Populate 0xC00000 - 0xFFFFFF, then wrap around and populate 0x3E8000 - 0x7DFFFF
-            // TODO: this is largely a special case and is not that pressing.
-            return write_ex_hi_rom(&rom, mem_ptr);
+            // TODO: https://github.com/HunterKing/RuSuper/issues/28
+            num_banks = 0;
+            bank_size = BankSize::Hi;
+            base_addr = 0;
         }
         RomSize::HiRom => {
+            // Populate 0xC00000 - 0xFFFFFF, then mirror half to 0x008000 - 3F8FFFF, and half to 0x808000 - 0xBF8000.
             num_banks = rom.capacity() / HI_ROM_BANK_SIZE_BYTES;
             bank_size = BankSize::Hi;
             base_addr = compose_address(HI_ROM_BANK_ADDR as u8, 0);
@@ -492,7 +516,7 @@ fn write_rom_to_memory(
             &rom[offset..offset + bank_size as usize - 1],
         ) {
             Ok(_t) => write_result = Ok(()),
-            Err(e) => write_result = Err(RomReadError::new(e.to_string())),
+            Err(e) => write_result = Err(RomReadError::from(e.to_string())),
         }
     }
     return write_result;
@@ -504,17 +528,20 @@ fn write_rom_to_memory(
 /// # Parameters:
 ///     - `rom`:        Rom to read data from.
 ///     - `mem_map`:    Type of rom to write mirror for.
-///     - `mem_ptr`:    Memory to populate.
+///     - `mem_ptr`:    Mutable pointer to memory to populate.
 /// # Returns:
 ///     - `Ok()`:           If written successfully,
 ///     - `RomReadError`:   If an error was encountered in the process.
 fn write_rom_mirror(
-    rom: &Vec<u8>, mem_map: RomSize, mem_ptr: &mut memory::Memory,
+    rom: &Vec<u8>,
+    mem_map: RomSize,
+    mem_ptr: &mut memory::Memory,
 ) -> Result<(), RomReadError> {
     let bank_clusters: Vec<usize>;
     let base_addrs: Vec<usize>;
     match mem_map {
-        RomSize::ExHiRom => return write_ex_hi_rom_mirror(rom, mem_ptr),
+        //TODO: https://github.com/HunterKing/RuSuper/issues/28
+        RomSize::ExHiRom => return Err(RomReadError::from("ExHiROM Mirror is unimplemented")),
         RomSize::HiRom => {
             // HiRom gets split across 2 areas of half-size banks.
             bank_clusters = vec![
@@ -527,6 +554,8 @@ fn write_rom_mirror(
             ]
         }
         RomSize::LoRom => {
+            // LoRom gets written contiguously across 0x008000 - 0x7DFFFF.
+            // We'll let this write through 7E-7F because those will be reset on RAM init anyways.
             bank_clusters = vec![rom.capacity() / LO_ROM_BANK_SIZE_BYTES];
             base_addrs = vec![memory::MEMORY_START];
         }
@@ -534,9 +563,10 @@ fn write_rom_mirror(
 
     let mut write_result: Result<(), RomReadError> = Ok(());
 
-    // Between each bank, the location in memory may move, but the rom remains contiguous,
-    //      So we need to keep track of where it is.
+    // Between each bank the location in memory may move, but the rom remains contiguous.
     let mut rom_cluster_offset: usize = 0;
+
+    // Iterate through each cluster, and then iterate through the banks in those clusters.
     for cluster in 0..bank_clusters.len() {
         for bank in 0..bank_clusters[cluster] {
             let mem_offset: usize = bank * LO_ROM_BANK_SIZE_BYTES as usize;
@@ -548,10 +578,9 @@ fn write_rom_mirror(
                 &rom[rom_offset..rom_offset + LO_ROM_BANK_SIZE_BYTES - 1],
             ) {
                 Ok(_t) => write_result = Ok(()),
-                Err(e) => write_result = Err(RomReadError::new(e.to_string())),
+                Err(e) => write_result = Err(RomReadError::from(e.to_string())),
             }
         }
-
         rom_cluster_offset += bank_clusters[cluster];
     }
 
@@ -560,6 +589,7 @@ fn write_rom_mirror(
 
 /// Write an exhirom to memory.
 /// https://snes.nesdev.org/wiki/Memory_map#ExHiROM
+/// TODO: https://github.com/HunterKing/RuSuper/issues/28
 ///
 /// # Parameters:
 ///     - `rom`:        Rom to read data from.
@@ -567,12 +597,13 @@ fn write_rom_mirror(
 /// # Returns:
 ///     - `Ok()`:           If written Ok.
 ///     - `RomReadError`:   If process failed.
-fn write_ex_hi_rom(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
-    return Err(RomReadError::new("Unimplemented for ExHiRom".to_string()));
+fn _write_ex_hi_rom(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
+    return Err(RomReadError::from("Unimplemented for ExHiRom".to_string()));
 }
 
 /// Write an exhirom mirror into memory.
 /// https://snes.nesdev.org/wiki/Memory_map#ExHiROM
+/// TODO: https://github.com/HunterKing/RuSuper/issues/28
 ///
 /// # Parameters:
 ///     - `rom`:        Rom to read data from.
@@ -580,18 +611,21 @@ fn write_ex_hi_rom(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), Ro
 /// # Returns:
 ///     - `Ok()`:           If written Ok.
 ///     - `RomReadError`:   If process failed.
-fn write_ex_hi_rom_mirror(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
-    return Err(RomReadError::new("Unimplemented for ExHiRom".to_string()));
+fn _write_ex_hi_rom_mirror(
+    rom: &Vec<u8>,
+    mem_ptr: &mut memory::Memory,
+) -> Result<(), RomReadError> {
+    return Err(RomReadError::from("Unimplemented for ExHiRom".to_string()));
 }
 
 /// Find and grab the header from target rom if available.
 /// # Parameters:
 ///     - `rom`:    Pointer to rom data to analyze.
 /// # Returns:
-///     - `Header`:      The header for this rom, if found.
-///     - `RomReadError` If the header was unparseable.
+///     - `Ok(RomData)`:        The header data for this rom, if found.
+///     - `Err(RomReadError)`:  If the header was unparseable.
 fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
-    let mut retval: Result<RomData, RomReadError> = Err(RomReadError::new("".to_string()));
+    let mut retval: Result<RomData, RomReadError> = Err(RomReadError::from(""));
     let mut test_header: Header = [0; HDR_LEN_BYTES];
 
     // Sum all bytes in the file. overflow is fine.
@@ -615,7 +649,7 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
         //      2. Find the index for that, and sum the former half.
         //      3. Take a sum of the latter half, and then calculate the number of times to multiply it from the remainder. E.G. 3.0 MiB ROM, 1.0MiB latter half * 2.;
         let pwr_of_two_index = rom.capacity().next_power_of_two() / 2;
-        let rom_remainder = rom[pwr_of_two_index..].len(); // E.G. 3.0 MiB rom -> 1,048,576 (1MiB)
+        let rom_remainder = rom[pwr_of_two_index..].len();
         let number_of_iterations: f32 = pwr_of_two_index as f32 / rom_remainder as f32; // do a floating point division for the circumstance of needing like 1.5x multipliers
 
         for byte in &rom[0..pwr_of_two_index] {
@@ -635,6 +669,7 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 
     const ROM_OPTIONS: [RomSize; ROM_SIZE_NUM] = [RomSize::ExHiRom, RomSize::HiRom, RomSize::LoRom];
     for size in ROM_OPTIONS.iter() {
+        // Screen whether the ROM can even fit in the area that the header would be in.
         if rom.capacity() > *size as usize {
             test_header.clone_from_slice(&rom[*size as usize..*size as usize + HDR_LEN_BYTES]);
 
@@ -642,6 +677,7 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
                 Ok(tested_size) => {
                     let mut newmode = RomModeMapping::new();
                     newmode.mem_map = tested_size;
+
                     return Ok(RomData {
                         header: test_header,
                         opt_header: [0; OPT_HEADER_LEN_BYTES],
@@ -663,9 +699,6 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 /// # Parameters:
 ///     - `rom`:        A Rom to pull data from.
 ///     - `data`:       A RomData object.
-/// # Returns:
-///     - `Some(CustomCoProcessor)`:    If the rom indicates coprocessor but not complete.
-///     - `None`:                       Otherwise.
 fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) {
     let header_addr: usize;
     match &data.mode.mem_map {
@@ -681,9 +714,14 @@ fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) {
     }
 }
 
+/// After the header data has been extracted, parse it into a RomMapMode object for easier use.
+/// # Parameters:
+///     - `data`:   Mutable pointer to RomData containing both the header and the RomMapMode to populate.
+/// # Returns:
+///     - `Ok(())`:             If all mapped values were found OK.
+///     - `Err(RomReadError)`:  If any mapped value was found to be gibberish.
 fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
-    // FIXME: clean up these magic numbers later.
-
+    // Find the ROM clock speed.
     if data.header[HDR_MAP_MODE_INDEX] & MAP_FASTROM_MASK != 0 {
         data.mode.speed = RomClkSpeed::FastRom;
     }
@@ -691,25 +729,25 @@ fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
         data.mode.speed = RomClkSpeed::SlowRom;
     }
 
+    // Find the ROM Region.
     if data.header[HDR_DEST_CODE_INDEX] < RomRegion::None as u8 {
         data.mode.region = RomRegion::from(data.header[HDR_DEST_CODE_INDEX]);
     }
 
-    // Low 4 bits specify presence or absence
-    // https://snes.nesdev.org/wiki/ROM_header
-    match data.header[HDR_CART_TYPE_INDEX] & 0x0F {
-        // TODO: you cannot do (CartType::RomOnly as u8) even if you have set a #[repr(u8)] for the enum.
-        // Find a nicer way to match this (I really don't want to go back and make constants for enums that exist already).
-        0x00 => (), // ROM Only
-        0x01 | 0x02 => {
-            // 0x01: ROM + SRAM
-            // 0x02: ROM + SRAM + Battery (Presence of battery is unnecessary for us)
+    // Find the ROM cart type.
+    let romtype = CartType::from(data.header[HDR_CART_TYPE_INDEX] & CART_TYPE_MASK);
+    match romtype {
+        CartType::ROMOnly => (),
+        CartType::ROMSram | CartType::ROMSramBattery => {
             // Max is 7
             data.mode.sram_size = (2usize.pow(data.header[HDR_RAM_SIZE_INDEX].into())) as u8;
         }
-        0x03 => {
+        CartType::ROMCoCpu
+        | CartType::ROMCoCpuBattery
+        | CartType::ROMCoCpuSram
+        | CartType::ROMCoCpuSramBattery => {
             // Upper 4 bits specify type
-            let cart_type = (data.header[HDR_CART_TYPE_INDEX] & 0xF0) >> 4;
+            let cart_type = (data.header[HDR_CART_TYPE_INDEX] & ROM_COPROCESSOR_MASK) >> 4;
             if cart_type < RomCoProcessor::None as u8 {
                 data.mode.coproc = RomCoProcessor::from(cart_type);
             }
@@ -723,15 +761,17 @@ fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
                         CustomCoProcessor::from(data.opt_header[OPT_SUB_CART_TYPE_INDEX]);
                 }
             }
+
+            if (romtype == CartType::ROMCoCpuSram || romtype == CartType::ROMCoCpuSramBattery) {
+                // Max is 7
+                data.mode.sram_size = (2usize.pow(data.header[HDR_RAM_SIZE_INDEX].into())) as u8;
+            }
         }
-        _ => {
-            return Err(RomReadError::new(
-                format!(
-                    "Cart type was invalid: {}",
-                    data.header[HDR_CART_TYPE_INDEX]
-                )
-                .to_string(),
-            ))
+        CartType::None => {
+            return Err(RomReadError::from(format!(
+                "Cart type was invalid: {}",
+                data.header[HDR_CART_TYPE_INDEX]
+            )))
         }
     }
 
@@ -760,8 +800,8 @@ fn fetch_exception_vectors(rom: &Vec<u8>, data: &mut RomData) {
 ///     - `checksum`:   u16 sum of all bytes in the file, with overflow discarded.
 ///     - `header`:     The header to analyze.
 /// # Returns:
-///     - `RomSize`:        If the ROM checksum was valid,
-///     - `RomReadError`:   If the ROM checksum was invalid, with both the calculated and internal values printed.
+///     - `Ok(RomSize)`:            If the ROM checksum was valid,
+///     - `Err(RomReadError)`:      If the ROM checksum was invalid, with both the calculated and internal values printed.
 fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError> {
     let test_checksum: u16 =
         u16::from_le_bytes([header[HDR_CHECKSUM_INDEX], header[HDR_CHECKSUM_INDEX + 1]]);
@@ -770,7 +810,7 @@ fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError
         header[HDR_COMPLEMENT_CHECK_INDEX + 1],
     ]);
 
-    let mut retval: Result<RomSize, RomReadError> = Err(RomReadError::new(format!(
+    let mut retval: Result<RomSize, RomReadError> = Err(RomReadError::from(format!(
         "ROM Checksum was invalid.\nCalculated Checksum: {:#06X}\nROM Checksum: {:#06X}",
         checksum, test_checksum
     )));
@@ -789,8 +829,8 @@ fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError
             retval = Ok(RomSize::LoRom);
         }
         else {
-            retval = Err(RomReadError::new(
-                "ROM Checksum was valid, but mapping mode was unreadable".to_string(),
+            retval = Err(RomReadError::from(
+                "ROM Checksum was valid, but mapping mode was unreadable",
             ));
         }
     }
@@ -798,7 +838,7 @@ fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError
     return retval;
 }
 
-/********************************* ROM Info Tests ******************************************************/
+/**************************************** Tests *************************************************************************/
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -808,7 +848,161 @@ mod tests {
     const HIROM_VALUE: u8 = 0x21;
     const EXHIROM_VALUE: u8 = 0x25;
     const INVALID_MAP_VALUE: u8 = 0xC0;
+    const CHECKSUM_FIXED_VALUE: u16 = 0x01FE;
 
+    /**************************************** Test Helpers **************************************************************/
+
+    /// Provided a target size, construct a header with a valid checksum for that value, and return the outcome.
+    /// # Parameters:
+    ///     - `expected_result`: Type of ROM to test.
+    /// # Returns:
+    ///     - `Ok(RomSize)`:     Matching ROM size to expected_result if test is OK,
+    ///     - `Err(RomReadErr)`: If `test_checksum()` is broken.
+    fn test_checksum_result(expected_result: RomSize) -> Result<RomSize, RomReadError> {
+        // Generate a randomized header.
+        let mut test_header: Header = rand::thread_rng().gen();
+        let mut checksum: u16 = 0;
+
+        // Set the map value to match the expected result.
+        let header_map_value: u8;
+        match expected_result {
+            RomSize::LoRom => header_map_value = LOROM_VALUE,
+            RomSize::HiRom => header_map_value = HIROM_VALUE,
+            RomSize::ExHiRom => header_map_value = EXHIROM_VALUE,
+        }
+        test_header[HDR_MAP_MODE_INDEX] = header_map_value;
+
+        // Calculate the checksum and complement value.
+        for byte in test_header.iter() {
+            checksum += *byte as u16;
+        }
+        let compare_value: u16 = HDR_TEST_VALUE - checksum;
+        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
+        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
+        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
+        test_header[HDR_CHECKSUM_INDEX + 1] = checksum.to_le_bytes()[1];
+
+        test_checksum(checksum, &test_header)
+    }
+
+    /// Generate a random rom and fetch the optional header out of it.
+    /// # Parameters:
+    ///     - `expected_type`:  Type of ROM to generate and test for optional header (Lo, Hi, ExHi).
+    fn test_fetch_optional_header(expected_type: RomSize) {
+        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
+        let mut test_rom: Box<[u8; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]> =
+            vec![0; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]
+                .into_boxed_slice()
+                .try_into()
+                .unwrap();
+        rand::thread_rng().fill_bytes(&mut *test_rom);
+        let mut data: RomData = RomData::new();
+
+        // Mark the type and the fixed val to say that an optional exists.
+        data.mode.mem_map = expected_type;
+        data.header[HDR_FIXED_VAL_INDEX] = HDR_OPT_PRESENT;
+
+        // Use the expected size to pass to fetch_opt_header to test against.
+        let header_location: usize;
+        match expected_type {
+            RomSize::LoRom => header_location = LO_ROM_EXT_HEADER_ADDR,
+            RomSize::HiRom => header_location = HI_ROM_EXT_HEADER_ADDR,
+            RomSize::ExHiRom => header_location = EX_HI_ROM_EXT_HEADER_ADDR,
+        }
+        fetch_opt_header(&test_rom.to_vec(), &mut data);
+
+        // Check that every byte in the optional header that was grabbed and the optional header that was generated are equal.
+        for byte in 0..OPT_HEADER_LEN_BYTES {
+            assert_eq!(test_rom[header_location + byte], data.opt_header[byte]);
+        }
+    }
+
+    /// Generate a random rom and fetch the exception vector table from it.
+    /// # Parameters:
+    ///     - `expected_type`: Type of ROM to generate and test (Lo, Hi, ExHi).
+    fn test_fetch_exception_headers(expected_type: RomSize) {
+        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
+        let mut test_rom: Box<[u8; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]> =
+            vec![0; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]
+                .into_boxed_slice()
+                .try_into()
+                .unwrap();
+        rand::thread_rng().fill_bytes(&mut *test_rom);
+        let mut data: RomData = RomData::new();
+
+        // Mark the header so that it matches the expected type.
+        data.mode.mem_map = expected_type;
+
+        let header_location: usize;
+        match expected_type {
+            RomSize::LoRom => header_location = LO_ROM_EXC_VECTOR_ADDR,
+            RomSize::HiRom => header_location = HI_ROM_EXC_VECTOR_ADDR,
+            RomSize::ExHiRom => header_location = EX_HI_ROM_EXC_VECTOR_ADDR,
+        }
+        fetch_exception_vectors(&test_rom.to_vec(), &mut data);
+
+        for byte in 0..OPT_HEADER_LEN_BYTES {
+            assert_eq!(
+                test_rom[header_location + byte],
+                data.exception_vectors[byte]
+            );
+        }
+    }
+
+    /// Make a random non-power-of-2 size rom, generate a checksum, and test it.
+    /// Parameters:
+    ///     - `mem_map`:    Type of rom to generate (Lo, Hi, ExHi).
+    ///     - `size`:       Target size to make in bytes.
+    fn fetch_header_for_misaligned_rom(mem_map: RomSize, size: usize) {
+        let mut test_rom: Vec<u8> = vec![0; size].into_boxed_slice().try_into().unwrap();
+        rand::thread_rng().fill_bytes(&mut *test_rom);
+
+        // Set the map mode to the target type.
+        let hdr_byte_index: usize = mem_map as usize;
+        match mem_map {
+            RomSize::LoRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = LOROM_VALUE,
+            RomSize::HiRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = HIROM_VALUE,
+            RomSize::ExHiRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = EXHIROM_VALUE,
+        }
+
+        // Zero the checksum values, as we will have to recompute at the end.
+        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX] = 0;
+        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX + 1] = 0;
+        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX] = 0;
+        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX + 1] = 0;
+
+        // Calculate the checksum of the first chunk.
+        let pwr_of_two_index = size.next_power_of_two() / 2;
+        let mut checksum: Wrapping<u16> = Wrapping(0);
+        for byte in &test_rom[0..pwr_of_two_index] {
+            checksum += Wrapping((*byte) as u16);
+        }
+
+        // Calculate the checksum of the second chunk multiplied up to the size of the first.
+        let remainder = test_rom.capacity() - pwr_of_two_index;
+        let iterations = (test_rom.capacity() - remainder) / remainder;
+        for _iteration in 0..iterations {
+            for byte in &test_rom[pwr_of_two_index..] {
+                checksum += Wrapping((*byte) as u16);
+            }
+        }
+        // Add the value that the checksum will offset the ROM size by since the values were set to 0.
+        checksum += CHECKSUM_FIXED_VALUE;
+
+        // Write the checksum and test value into the ROM.
+        let compare_value: u16 = HDR_TEST_VALUE - checksum.0;
+        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
+        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
+        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX] = checksum.0.to_le_bytes()[0];
+        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX + 1] = checksum.0.to_le_bytes()[1];
+
+        assert_eq!(
+            mem_map,
+            fetch_header(&test_rom.to_vec()).unwrap().mode.mem_map
+        );
+    }
+
+    /**************************************** Unit Test Implementations *************************************************/
     mod lorom_tests {
         use super::*;
 
@@ -897,39 +1091,6 @@ mod tests {
         test_checksum(checksum, &test_header).unwrap();
     }
 
-    /// Provided a target size, construct a header with a valid checksum for that value, and return the outcome.
-    /// # Parameters:
-    ///     - `expected_result`: Type of ROM to test.
-    /// # Returns:
-    ///     - `Ok(RomSize)`:     Matching ROM size to expected_result if test is OK,
-    ///     - `Err(RomReadErr)`: If `test_checksum()` is broken.
-    fn test_checksum_result(expected_result: RomSize) -> Result<RomSize, RomReadError> {
-        // Generate a randomized header.
-        let mut test_header: Header = rand::thread_rng().gen();
-        let mut checksum: u16 = 0;
-
-        // Set the map value to match the expected result.
-        let header_map_value: u8;
-        match expected_result {
-            RomSize::LoRom => header_map_value = LOROM_VALUE,
-            RomSize::HiRom => header_map_value = HIROM_VALUE,
-            RomSize::ExHiRom => header_map_value = EXHIROM_VALUE,
-        }
-        test_header[HDR_MAP_MODE_INDEX] = header_map_value;
-
-        // Calculate the checksum and complement value.
-        for byte in test_header.iter() {
-            checksum += *byte as u16;
-        }
-        let compare_value: u16 = HDR_TEST_VALUE - checksum;
-        test_header[HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
-        test_header[HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
-        test_header[HDR_CHECKSUM_INDEX] = checksum.to_le_bytes()[0];
-        test_header[HDR_CHECKSUM_INDEX + 1] = checksum.to_le_bytes()[1];
-
-        test_checksum(checksum, &test_header)
-    }
-
     #[test]
     #[should_panic]
     /// Test if a header with a bad checksum fails.
@@ -946,105 +1107,6 @@ mod tests {
         test_checksum(checksum, &test_header).unwrap();
     }
 
-    fn test_fetch_optional_header(expected_type: RomSize) {
-        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
-        let mut test_rom: Box<[u8; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]> =
-            vec![0; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]
-                .into_boxed_slice()
-                .try_into()
-                .unwrap();
-        rand::thread_rng().fill_bytes(&mut *test_rom);
-        let mut data: RomData = RomData::new();
-        data.mode.mem_map = expected_type;
-        data.header[HDR_FIXED_VAL_INDEX] = HDR_OPT_PRESENT;
-
-        let header_location: usize;
-        match expected_type {
-            RomSize::LoRom => header_location = LO_ROM_EXT_HEADER_ADDR,
-            RomSize::HiRom => header_location = HI_ROM_EXT_HEADER_ADDR,
-            RomSize::ExHiRom => header_location = EX_HI_ROM_EXT_HEADER_ADDR,
-        }
-
-        fetch_opt_header(&test_rom.to_vec(), &mut data);
-
-        for byte in 0..OPT_HEADER_LEN_BYTES {
-            assert_eq!(test_rom[header_location + byte], data.opt_header[byte]);
-        }
-    }
-
-    fn test_fetch_exception_headers(expected_type: RomSize) {
-        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
-        let mut test_rom: Box<[u8; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]> =
-            vec![0; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]
-                .into_boxed_slice()
-                .try_into()
-                .unwrap();
-        rand::thread_rng().fill_bytes(&mut *test_rom);
-        let mut data: RomData = RomData::new();
-        data.mode.mem_map = expected_type;
-
-        let header_location: usize;
-        match expected_type {
-            RomSize::LoRom => header_location = LO_ROM_EXC_VECTOR_ADDR,
-            RomSize::HiRom => header_location = HI_ROM_EXC_VECTOR_ADDR,
-            RomSize::ExHiRom => header_location = EX_HI_ROM_EXC_VECTOR_ADDR,
-        }
-
-        fetch_exception_vectors(&test_rom.to_vec(), &mut data);
-
-        for byte in 0..OPT_HEADER_LEN_BYTES {
-            assert_eq!(
-                test_rom[header_location + byte],
-                data.exception_vectors[byte]
-            );
-        }
-    }
-
-    fn fetch_header_for_misaligned_rom(mem_map: RomSize, size: usize) {
-        let mut test_rom: Vec<u8> = vec![0; size].into_boxed_slice().try_into().unwrap();
-        rand::thread_rng().fill_bytes(&mut *test_rom);
-
-        let hdr_byte_index: usize = mem_map as usize;
-        match mem_map {
-            RomSize::LoRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = LOROM_VALUE,
-            RomSize::HiRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = HIROM_VALUE,
-            RomSize::ExHiRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = EXHIROM_VALUE,
-        }
-
-        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX] = 0;
-        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX + 1] = 0;
-        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX] = 0;
-        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX + 1] = 0;
-
-        // Calculate the checksum and complement value.
-        let pwr_of_two_index = size.next_power_of_two() / 2;
-        let mut checksum: Wrapping<u16> = Wrapping(0);
-        for byte in &test_rom[0..pwr_of_two_index] {
-            checksum += Wrapping((*byte) as u16);
-        }
-
-        let remainder = test_rom.capacity() - pwr_of_two_index;
-        let iterations = (test_rom.capacity() - remainder) / remainder;
-
-        for _iteration in 0..iterations {
-            for byte in &test_rom[pwr_of_two_index..] {
-                checksum += Wrapping((*byte) as u16);
-            }
-        }
-        checksum += 0x01FE; // Also count the bytes that will go in the rom as a checksum
-
-        let compare_value: u16 = HDR_TEST_VALUE - checksum.0;
-        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX] = compare_value.to_le_bytes()[0];
-        test_rom[hdr_byte_index + HDR_COMPLEMENT_CHECK_INDEX + 1] = compare_value.to_le_bytes()[1];
-        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX] = checksum.0.to_le_bytes()[0];
-        test_rom[hdr_byte_index + HDR_CHECKSUM_INDEX + 1] = checksum.0.to_le_bytes()[1];
-
-        assert_eq!(
-            mem_map,
-            fetch_header(&test_rom.to_vec()).unwrap().mode.mem_map
-        );
-    }
-
     #[test]
     fn test_non_power_of_2_roms() {
         const HALF_STEP: usize = 512 * 1024;
@@ -1056,5 +1118,6 @@ mod tests {
         fetch_header_for_misaligned_rom(RomSize::LoRom, HALF_STEP * 6); // 3.0 MiB (2MiB + 1MiB)
                                                                         // 3.5 MiB is not a valid configuration.
                                                                         // TODO: The ExHiROM variants are as-yet untested, because the ExHiRom functionality is not present.
+                                                                        // https://github.com/HunterKing/RuSuper/issues/28
     }
 }

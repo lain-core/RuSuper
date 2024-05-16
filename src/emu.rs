@@ -7,21 +7,17 @@ use crate::debugger;
 use crate::memory;
 use crate::romdata;
 
-/***** Timing related constants *****/
-// Check if the vm is running and step if so.
-// This is not self-contained in a loop because the outside will contain debugger functions in the future.
-// The SNES master clock runs at about 21.477MHz NTSC (theoretically 1.89e9/88 Hz).
-// The SNES CPU runs at either 2.68MHz or 3.58MHz based on what a rom requests.
-// https://wiki.superfamicom.org/timing
+/**************************************** Constant Values ***************************************************************/
+/// The SNES master clock runs at about 21.477MHz NTSC (theoretically 1.89e9/88 Hz).
 const MASTER_CLOCK_CYCLE_TICK_SEC: f64 = 1.0 / (21.477 * 1000.0 * 1000.0);
+
+/// SlowROMs run the SNES CPU at 2.68MHz.
 const SLOWROM_CLOCK_CYCLE_TICK_SEC: f64 = 1.0 / (2.68 * 1000.0 * 1000.0);
+
+/// FastROMs run the SNES CPU at 3.58MHz.
 const FASTROM_CLOCK_CYCLE_TICK_SEC: f64 = 1.0 / (3.58 * 1000.0 * 1000.0);
 
-/// Number of cycles between draw of scanline.
-const CYCLES_PER_SCANLINE: usize = 1364;
-
-/// Every other frame in non-interlaced, 4 less cycles per frame. This is "extra credit".
-const NON_INTERLACE_MODE_ALTERNATE_CYCLES_PER: usize = 1360;
+/**************************************** Struct and Type definitions ***************************************************/
 
 /// Struct to manage count of clocks.
 struct ClockState {
@@ -29,7 +25,6 @@ struct ClockState {
     master_clock_cycles_elapsed: usize,
     cpu_clock_cycles_elapsed: usize,
     ppu_clock_cycles_elapsed: usize,
-    // TODO: maybe more later.
 }
 
 impl ClockState {
@@ -64,15 +59,18 @@ impl VirtualMachine {
     }
 }
 
-/// Run the system.
-/// Also manages timings and delegates to other legs of the system. Might be worth breaking up in the future.
+/**************************************** File Scope Functions **********************************************************/
+
+/// Parse the CLI args, load the rom into memory, and then run.
+/// Pass it to the debugger to run if enabled.
 /// # Parameters
-///     - `vm`  Object holding CPU state and Memory for this instance.
+///     - `path`:       Path to ROM to load.
+///     - `args`:       CLI args passed to the program from main.
 pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     print!("Opening file {}... ", &path.display());
 
     let mut vm = VirtualMachine::new();
-    // TODO: find a better way to do this
+    // TODO: https://github.com/HunterKing/RuSuper/issues/27
     if args.len() > 2 {
         if args[2] == "--no-check" {
             vm.romdata = romdata::load_rom(path, &mut vm.memory, true).unwrap();
@@ -86,14 +84,13 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
         vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
     }
     print!("Success.\n");
-    io::stdout().flush().unwrap();
 
     vm.clocks.clock_speed = match vm.romdata.mode.speed {
         romdata::RomClkSpeed::SlowRom => SLOWROM_CLOCK_CYCLE_TICK_SEC,
         romdata::RomClkSpeed::FastRom => FASTROM_CLOCK_CYCLE_TICK_SEC,
     };
 
-    // If the user wants to use the debugger let it delegate the run loop.
+    // If the user wants to use the debugger, let it delegate the run loop.
     let debugger_enabled = true;
     if debugger_enabled {
         debugger::run(vm);
@@ -104,8 +101,7 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
             // TODO: Should CPU be threaded or should this file be the king?
             // TODO: Spin off thread for SPC700(?)
             // TODO: Spin off thread for PPU(?)
-            // If the debugger is enabled, allow it to delegate the runtime.
-            // If the debugger is not enabled, just run as normal.
+
             vm.is_running = step_cpu(&mut vm);
         }
     }
@@ -128,7 +124,6 @@ pub fn step_cpu(vm: &mut VirtualMachine) -> bool {
     }
     // Otherwise, punt on operating for however long we need to.
     else if vm.cpu.cycles_to_pend > 0 {
-        // We have to round because rust does not implement fractional nanoseconds (how unbelievable!!)
         std::thread::sleep(time::Duration::from_secs_f64(vm.clocks.clock_speed));
         vm.clocks.cpu_clock_cycles_elapsed += 1;
         vm.cpu.cycles_to_pend -= 1;
