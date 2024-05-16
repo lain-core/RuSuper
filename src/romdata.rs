@@ -381,7 +381,7 @@ pub fn load_rom(
     let mut data = RomData::new();
 
     if bypass_tests {
-        for offset in 0..rom.capacity() {
+        for offset in 0..rom.len() {
             memory.put_byte(0x808000 + offset, rom[offset]);
         }
     }
@@ -743,7 +743,7 @@ fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
 
     data.mode.expansion = RomExpansions::from(data.mode.coproc);
 
-    return Err(RomReadError::new("Unimplemented".to_string()));
+    return Ok(());
 }
 
 /// Fetch the exception vector table from a rom.

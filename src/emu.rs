@@ -148,6 +148,8 @@ impl From<&str> for DebugCommandTypes {
             "q" => Self::Exit,
             "quit" => Self::Exit,
             "exit" => Self::Exit,
+            "p" => Self::Print,
+            "print" => Self::Print,
             _ => Self::Invalid,
         }
     }
@@ -165,7 +167,7 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     let debug_cmd_table = construct_cmd_table();
     let mut vm = VirtualMachine::new();
     // TODO: find a better way to do this
-    if args.capacity() > 2 {
+    if args.len() > 2 {
         if args[2] == "--no-check" {
             vm.romdata = romdata::load_rom(path, &mut vm.memory, true).unwrap();
         }
@@ -182,7 +184,7 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
         romdata::RomClkSpeed::SlowRom => SLOWROM_CLOCK_CYCLE_TICK_SEC,
         romdata::RomClkSpeed::FastRom => FASTROM_CLOCK_CYCLE_TICK_SEC,
     };
-    print!("Success.\n>> ");
+    print!("Success.\n");
     io::stdout().flush().unwrap();
     loop {
         // TODO: Should CPU be threaded or should this file be the king?
@@ -192,6 +194,8 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
             vm.debugger.is_running = step_cpu(&mut vm);
         }
         else {
+            print!(">> ");
+            io::stdout().flush().unwrap();
             check_dbg_input(&mut vm, &debug_cmd_table);
         }
     }
@@ -234,6 +238,14 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
             Box::new(misc::dbg_invalid) as DebugFn,
         ),
         (DebugCommandTypes::Exit, Box::new(misc::dbg_exit) as DebugFn),
+        (
+            DebugCommandTypes::Break,
+            Box::new(breakpoints::dbg_breakpoint) as DebugFn
+        ),
+        (
+            DebugCommandTypes::Print,
+            Box::new(misc::dbg_print) as DebugFn
+        )
     ])
 }
 
@@ -247,6 +259,4 @@ fn check_dbg_input(vm: &mut VirtualMachine, debug_cmd_map: &HashMap<DebugCommand
         let command: DebugCommandTypes = DebugCommandTypes::from(trimmed[0]);
         debug_cmd_map[&command](trimmed[1..].to_vec(), vm);
     }
-    print!(">> ");
-    io::stdout().flush().unwrap();
 }

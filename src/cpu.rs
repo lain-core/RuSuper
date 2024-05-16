@@ -1422,7 +1422,17 @@ impl CpuState {
 
         continue_run
     }
+
+    /// Print the current state of the CPU.
+    pub fn print_state(&self) {
+        print!(
+            "\nPC: {:#08X} ACC: {:#06X} SP: {:#06X}\nData Bank: {:#04X} Prog Bank: {:#04X} Direct Page: {:#06X}\nFlags nvmxdizc: {:#04X}\n    {:#010b}\n"
+             ,self.pc, self.acc, self.sp, self.data_bank, self.prog_bank, self.direct_page, self.flags, self.flags
+        );
+    }
 }
+
+
 
 /***** File scope functions *****/
 
