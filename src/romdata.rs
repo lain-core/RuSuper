@@ -636,12 +636,6 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
     const ROM_OPTIONS: [RomSize; ROM_SIZE_NUM] = [RomSize::ExHiRom, RomSize::HiRom, RomSize::LoRom];
     for size in ROM_OPTIONS.iter() {
         if rom.capacity() > *size as usize {
-            println!(
-                "{:?}: Slicing header from {:#08X} to {:#08X}",
-                size,
-                (*size as usize),
-                (*size as usize + HDR_LEN_BYTES)
-            );
             test_header.clone_from_slice(&rom[*size as usize..*size as usize + HDR_LEN_BYTES]);
 
             match test_checksum(checksum.0, &test_header) {

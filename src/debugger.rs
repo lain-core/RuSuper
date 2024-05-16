@@ -98,6 +98,23 @@ impl From<&str> for DebugCommandTypes {
     }
 }
 
+enum TokenSeparators {
+    HexValue,
+    Offset,
+    Invalid,
+}
+
+impl From<&str> for TokenSeparators {
+    fn from(value: &str) -> Self {
+        match value {
+            "$" => Self::HexValue,
+            "0x" => Self::HexValue,
+            "+" => Self::Offset,
+            _ => Self::Invalid,
+        }
+    }
+}
+
 type DebugFn = Box<dyn Fn(Vec<&str>, &mut VirtualMachine)>;
 
 fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
