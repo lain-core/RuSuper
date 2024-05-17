@@ -7,6 +7,8 @@ use std::{
     collections::HashMap,
     io::{self, Write}, iter::Map,
 };
+
+use self::utils::collect_args;
 /**************************************** Struct and Type definitions ***************************************************/
 
 /// Struct to track the operation of the debugger.
@@ -82,7 +84,7 @@ impl From<&str> for TokenSeparators {
     }
 }
 
-type DebugFn = Box<dyn Fn(Vec<&str>, &mut VirtualMachine)>;
+type DebugFn = Box<dyn Fn(Vec<TokenSeparators>, &mut VirtualMachine)>;
 
 /**************************************** File Scope Functions **********************************************************/
 fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
@@ -114,14 +116,17 @@ fn check_dbg_input(debug: &mut DebuggerState, vm: &mut VirtualMachine) {
         .read_line(&mut input_text)
         .expect("Failed to read stdin");
     let trimmed: Vec<&str> = input_text.trim().split_whitespace().collect();
-    // let args: Map<TokenSeparators, &str>;
 
-    if trimmed.capacity() > 0 {
+    if trimmed.len() > 0 {
         let command: DebugCommandTypes = DebugCommandTypes::from(
             trimmed[0].to_lowercase().as_ref()
         );
+        let mut arguments: Vec<TokenSeparators> = vec![];
+        if trimmed.len() > 1 {
+            arguments = collect_args(trimmed[1..].concat()).unwrap();
+        } 
         // args = utils::collect_args(trimmed).unwrap();
-        debug.debug_cmds[&command](trimmed[1..].to_vec(), vm);
+        debug.debug_cmds[&command](arguments, vm);
     }
 }
 

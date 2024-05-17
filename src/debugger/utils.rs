@@ -61,41 +61,51 @@ impl HexOperators for &str {
 
 /**************************************** File Scope Functions **********************************************************/
 
-pub fn collect_args(args: Vec<&str>) -> Result<Map<TokenSeparators, &str>, InvalidValueError> {
-    let token_stream = args.concat();
+/// Parse a list of directives out into a collection of tokens.
+/// Parameters:
+///     - `args`:   The input from the user with the command removed and all other values concatenated.
+/// Returns:
+///     - `Ok(Vec<TokenSeparators>)`:   List of the arguments the user passed parsed into tokens.
+///     - `Err(InvalidValueError)`:
+pub fn collect_args(args: String) -> Result<Vec<TokenSeparators>, InvalidValueError> {
     let mut delimiters: Vec<TokenSeparators> = vec![];
     let mut value_buffer: String = "".to_string();
-    
-    for index in 0..token_stream.len() {
-        let current_char = token_stream.chars().nth(index).unwrap();
-        match TokenSeparators::from(token_stream.get(index..index).unwrap()) {
-            // If a separator is found, clear the buffer of other characters and then push on the sepatator.
-            TokenSeparators::HexValue => {
-                if value_buffer.len() > 0 {
-                    delimiters.push(TokenSeparators::Value(value_buffer));
-                    value_buffer = "".to_string();
-                }
-                delimiters.push(TokenSeparators::HexValue);
-                // Everything until the next value is a hex digit.
-            },
-            
-            TokenSeparators::Offset => {
-                if value_buffer.len() > 0 {
-                    delimiters.push(TokenSeparators::Value(value_buffer));
-                    value_buffer = "".to_string();
-                }
-                delimiters.push(TokenSeparators::Offset)
-            },
-            
-            // If it is not a delimiting character, push it onto the value buffer.
-            TokenSeparators::Invalid => {
-                value_buffer.push(current_char);
-            },
-            TokenSeparators::Value(_) => () // This is not a possible option in the TokenSeparators::from constructor
+
+    if args.len() > 0{
+        for index in 0..args.len() {
+            let current_char = args.chars().nth(index).unwrap();
+            match TokenSeparators::from(args.get(index..index).unwrap()) {
+                // If a separator is found, clear the buffer of other characters and then push on the sepatator.
+                TokenSeparators::HexValue => {
+                    if value_buffer.len() > 0 {
+                        delimiters.push(TokenSeparators::Value(value_buffer));
+                        value_buffer = "".to_string();
+                    }
+                    delimiters.push(TokenSeparators::HexValue);
+                    // Everything until the next value is a hex digit.
+                },
+                
+                TokenSeparators::Offset => {
+                    if value_buffer.len() > 0 {
+                        delimiters.push(TokenSeparators::Value(value_buffer));
+                        value_buffer = "".to_string();
+                    }
+                    delimiters.push(TokenSeparators::Offset)
+                },
+                
+                // If it is not a delimiting character, push it onto the value buffer.
+                TokenSeparators::Invalid => {
+                    value_buffer.push(current_char);
+                },
+                TokenSeparators::Value(_) => () // This is not a possible option in the TokenSeparators::from constructor
+            }
         }
     }
+    else{ 
+        return Err(InvalidValueError::from("Length of args passed was 0"));
+    }
     
-    Err(InvalidValueError::from(""))
+    return Ok(delimiters);
 }
 
 /// Convert a String value into a constructed hex value.

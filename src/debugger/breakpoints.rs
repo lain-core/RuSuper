@@ -1,4 +1,4 @@
-use super::VirtualMachine;
+use super::{TokenSeparators, VirtualMachine};
 
 /**
  *  - b             Set breakpoint at current PC
@@ -11,7 +11,7 @@ use super::VirtualMachine;
  */
 
 /// Acts as the controller for all breakpoint functions.
-pub fn dbg_breakpoint(args: Vec<&str>, vm: &mut VirtualMachine) {
+pub fn dbg_breakpoint(args: Vec<TokenSeparators>, vm: &mut VirtualMachine) {
     vm.cpu.print_state();
     println!("unimplemented");
 }
