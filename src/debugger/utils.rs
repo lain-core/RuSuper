@@ -1,9 +1,22 @@
+use std::{
+    fmt::{self, Debug},
+    thread::current,
+};
+
+use crate::emu::VirtualMachine;
+
 use super::TokenSeparators;
 
 /**************************************** Struct and Type definitions ***************************************************/
 #[derive(Debug, Clone)]
 pub struct InvalidValueError {
     value: String,
+}
+
+impl fmt::Display for InvalidValueError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }
 
 impl From<&str> for InvalidValueError {
@@ -24,6 +37,7 @@ impl From<String> for InvalidValueError {
 
 pub trait HexOperators {
     fn is_hex(&self) -> bool;
+    fn is_decimal(&self) -> bool;
     fn to_hex(&self) -> Result<usize, InvalidValueError>;
 }
 
@@ -31,6 +45,15 @@ impl HexOperators for String {
     fn is_hex(&self) -> bool {
         for char in self.chars() {
             if !char.is_digit(16) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    fn is_decimal(&self) -> bool {
+        for char in self.chars() {
+            if !char.is_digit(10) {
                 return false;
             }
         }
@@ -46,6 +69,15 @@ impl HexOperators for &str {
     fn is_hex(&self) -> bool {
         for char in self.chars() {
             if !char.is_digit(16) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    fn is_decimal(&self) -> bool {
+        for char in self.chars() {
+            if !char.is_digit(10) {
                 return false;
             }
         }
@@ -72,9 +104,10 @@ pub fn collect_args(args: String) -> Result<Vec<TokenSeparators>, InvalidValueEr
     if args.len() > 0 {
         for index in 0..args.len() {
             let current_char = args.chars().nth(index).unwrap();
-            match TokenSeparators::from(args.get(index..index).unwrap()) {
+            match TokenSeparators::from(current_char.to_string().as_str()) {
                 // If a separator is found, clear the buffer of other characters and then push on the sepatator.
                 TokenSeparators::HexValue => {
+                    // println!("Found a Hex delimiter");
                     if value_buffer.len() > 0 {
                         delimiters.push(TokenSeparators::Value(value_buffer));
                         value_buffer = "".to_string();
@@ -84,6 +117,7 @@ pub fn collect_args(args: String) -> Result<Vec<TokenSeparators>, InvalidValueEr
                 }
 
                 TokenSeparators::Offset => {
+                    // println!("Found an offset delimiter");
                     if value_buffer.len() > 0 {
                         delimiters.push(TokenSeparators::Value(value_buffer));
                         value_buffer = "".to_string();
@@ -93,50 +127,106 @@ pub fn collect_args(args: String) -> Result<Vec<TokenSeparators>, InvalidValueEr
 
                 // If it is not a delimiting character, push it onto the value buffer.
                 TokenSeparators::Invalid => {
+                    // println!("Pushing {} onto value", current_char);
                     value_buffer.push(current_char);
                 }
                 TokenSeparators::Value(_) => (), // This is not a possible option in the TokenSeparators::from constructor
+                TokenSeparators::Tag(_) => (), // This is not a possible option in the TokenSeparators::from Constructor
             }
         }
     }
     else {
         return Err(InvalidValueError::from("Length of args passed was 0"));
     }
+    // If there's anything left in the value buffer at the end throw it on.
+    if value_buffer.len() > 0 {
+        delimiters.push(TokenSeparators::Value(value_buffer));
+    }
 
+    println!("Final args was {:?}", delimiters);
     return Ok(delimiters);
 }
 
 /// Take a composed token list and compute a finalized address value.
+/// TODO: This function assumes that there are no tags; That will add complexity.
 /// Parameters:
 ///     - `args`: Arguments passed to the command, as a vector of TokenSeparators.
 /// Returns:
 ///     - `address`: A fully computed address.
-fn compute_address_from_args(args: Vec<TokenSeparators>) -> Result<usize, InvalidValueError> {
-    let address: usize = 0;
-    let mut iterator = args.iter();
-    for index in 0..args.len() {
-        let next = iterator.next().unwrap();
+pub fn compute_address_from_args(
+    args: Vec<TokenSeparators>,
+    vm: &VirtualMachine,
+) -> Result<usize, InvalidValueError> {
+    let mut address: Option<usize> = None;
+    let mut modifiers: Vec<TokenSeparators> = vec![];
+
+    for next in args.iter() {
         match next {
-            TokenSeparators::HexValue => {
-                let next = iterator.next().unwrap();
-                match next {
-                    TokenSeparators::Value(data) => {
-                        //
-                    }
-                    _ => {
-                        return Err(InvalidValueError::from(
-                            "Value following hex specifier was invalid",
-                        ));
-                    }
+            TokenSeparators::HexValue => modifiers.push(TokenSeparators::HexValue),
+            TokenSeparators::Offset => modifiers.push(TokenSeparators::Offset),
+            TokenSeparators::Value(data) => {
+                println!("Found Value: {}", data);
+                match apply_modifiers(&mut modifiers, vm, address, data.to_string()) {
+                    Ok(newaddr) => address = Some(newaddr),
+                    Err(e) => return Err(e),
                 }
+                // When we find a numeric value, go through the list of modifiers and apply them where necessary.
             }
-            TokenSeparators::Offset => todo!(),
-            TokenSeparators::Value(data) => {}
+            TokenSeparators::Tag(_) => (), //TODO:
             TokenSeparators::Invalid => (),
         }
     }
 
-    Ok(address)
+    match address {
+        Some(val) => Ok(val),
+        None => Err(InvalidValueError::from(
+            "Could not discern a value from arguments passed",
+        )),
+    }
+}
+
+///
+fn apply_modifiers(
+    modifiers: &mut Vec<TokenSeparators>,
+    vm: &VirtualMachine,
+    base_addr: Option<usize>,
+    value: String,
+) -> Result<usize, InvalidValueError> {
+    let mut scratch_value: usize = 0;
+    if value.is_decimal() || value.is_hex() {
+        // If the number is decimal go ahead and store the decimal representation into the scratch value.
+        if value.is_decimal() {
+            scratch_value = value.parse::<usize>().unwrap();
+        }
+
+        // Digest any modifiers found.
+        if modifiers.len() > 0 {
+            // Move right to left an apply the modifiers to the value.
+            while let Some(modi) = modifiers.pop() {
+                // If the value is a hex value, convert it and replace the decimal expression of it.
+                if modi == TokenSeparators::HexValue {
+                    println!("Applying Hex Modifier to value");
+                    scratch_value = value.to_hex()?;
+                }
+                // If the value is an offset:
+                //      - Check if a base address has been set prior to this, and modify it if so.
+                //      - Otherwise just apply the offset to the current PC value and store it.
+                else if modi == TokenSeparators::Offset {
+                    println!("Applying Offset Modifier to value");
+                    match base_addr {
+                        // If the address is none, the offset is relative to PC.
+                        None => {
+                            scratch_value = vm.cpu.get_pc() + scratch_value;
+                        }
+                        Some(addr_value) => {
+                            scratch_value = addr_value + scratch_value;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(scratch_value)
 }
 
 /// Convert a String value into a constructed hex value.

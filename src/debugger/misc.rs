@@ -7,11 +7,19 @@ const NUM_ADDR_BYTES: usize = 3;
 
 /**************************************** File Scope Functions **********************************************************/
 /// Exits the program.
-pub fn dbg_exit(_args: Vec<TokenSeparators>, _vm: &mut VirtualMachine) {
+pub fn dbg_exit(
+    _args: Vec<TokenSeparators>,
+    _debug: &mut super::DebuggerState,
+    _vm: &mut VirtualMachine,
+) {
     exit(0);
 }
 
-pub fn dbg_help(_args: Vec<TokenSeparators>, _vm: &mut VirtualMachine) {
+pub fn dbg_help(
+    _args: Vec<TokenSeparators>,
+    _debug: &mut super::DebuggerState,
+    _vm: &mut VirtualMachine,
+) {
     println!("==============================");
     println!("======== RuSuper Help ========\n");
     println!("==============================");
@@ -21,17 +29,30 @@ pub fn dbg_help(_args: Vec<TokenSeparators>, _vm: &mut VirtualMachine) {
     println!("c, r\n\tRun the program until a halt is reached, or a breakpoint is hit");
 }
 
-pub fn dbg_invalid(_args: Vec<TokenSeparators>, _vm: &mut VirtualMachine) {
-    dbg_help(_args, _vm);
+pub fn dbg_invalid(
+    _args: Vec<TokenSeparators>,
+    _debug: &mut super::DebuggerState,
+    _vm: &mut VirtualMachine,
+) {
+    dbg_help(_args, _debug, _vm);
 }
 
-pub fn dbg_continue(_args: Vec<TokenSeparators>, vm: &mut VirtualMachine) {
+pub fn dbg_continue(
+    _args: Vec<TokenSeparators>,
+    _debug: &mut super::DebuggerState,
+    vm: &mut VirtualMachine,
+) {
     vm.is_running = true;
 }
 
-pub fn dbg_print(args: Vec<TokenSeparators>, vm: &mut VirtualMachine) {}
+pub fn dbg_print(
+    args: Vec<TokenSeparators>,
+    debug: &mut super::DebuggerState,
+    vm: &mut VirtualMachine,
+) {
+}
 
-fn dbg_print_absolute(address: usize, vm: &mut VirtualMachine) {
+fn dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
     let byte_value = vm.memory.get_byte(address);
     let word_value = vm.memory.get_word(address);
 

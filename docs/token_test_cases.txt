@@ -1,0 +1,21 @@
+raw literals
+b $808000
+b $808000+$0A
+b $808000+50
+b +$0A
+b +50
+b 50
+b 50+$0A
+b 50+50
+
+tags
+b tag -> Make tag at PC
+b $808000 tag -> Make new tag
+b tag $808000 -> Make new tag (or error?)
+b +$0A tag -> Tag PC relative 
+b $0A+tag -> Modify value
+b tag+$0A -> Modify tag
+b tag+50 -> Modify tag
+b tag+tag -> Modify tag
+b tag tag $808000 -> error
+b $808000 tag tag -> error
