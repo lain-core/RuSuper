@@ -172,7 +172,9 @@ pub fn compute_address_from_args(
                 }
                 // When we find a numeric value, go through the list of modifiers and apply them where necessary.
             }
-            TokenSeparators::Tag(_) => (), //TODO:
+            TokenSeparators::Tag(name) => {
+                println!("Found Tag: {}", name);
+            }
             TokenSeparators::Invalid => (),
         }
     }
@@ -183,6 +185,33 @@ pub fn compute_address_from_args(
             "Could not discern a value from arguments passed",
         )),
     }
+}
+
+/// Iterate through a vector of TokenSeparators, and for each TokenSeparator::Value, discern if it is a tag or a number.
+/// # Parameters:
+///     - `tokens`:         A list of tokens to digest.
+/// # Returns:
+///     - A list of tokens, with TokenSeparator::Values replaced with tags where necessary.
+fn collect_tags(tokens: Vec<TokenSeparators>) -> Vec<TokenSeparators> {
+    let mut new_vec: Vec<TokenSeparators> = vec![];
+
+    for token in tokens {
+        match token {
+            TokenSeparators::Value(data) => {
+                // If the value is strictly numeric, just push it on as a value.
+                if data.is_decimal() || data.is_hex() {
+                    new_vec.push(TokenSeparators::Value(data));
+                }
+                else {
+                    // For now, just push it straight on, but in the future we should probably do some more checks(?)
+                    new_vec.push(TokenSeparators::Tag(data));
+                }
+            }
+            _ => new_vec.push(token),
+        }
+    }
+
+    new_vec
 }
 
 ///
