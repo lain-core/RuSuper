@@ -29,21 +29,7 @@ pub fn dbg_continue(_args: Vec<TokenSeparators>, vm: &mut VirtualMachine) {
     vm.is_running = true;
 }
 
-pub fn dbg_print(args: Vec<TokenSeparators>, vm: &mut VirtualMachine) {
-    // TODO: needs reimplementing
-    // let mut token = args.concat();
-    // if token.contains("+") {
-    //     dbg_print_offset();
-    // }
-    // else {
-    //     match token.to_hex() {
-    //         Ok(address) => dbg_print_absolute(address, vm),
-    //         Err(_e) => {
-    //             println!("Error: {} was an invalid address value.", token);
-    //         }
-    //     }
-    // }
-}
+pub fn dbg_print(args: Vec<TokenSeparators>, vm: &mut VirtualMachine) {}
 
 fn dbg_print_absolute(address: usize, vm: &mut VirtualMachine) {
     let byte_value = vm.memory.get_byte(address);

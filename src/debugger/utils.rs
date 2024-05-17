@@ -1,5 +1,3 @@
-use std::{iter::Map, str::Chars, string};
-
 use super::TokenSeparators;
 
 /**************************************** Struct and Type definitions ***************************************************/
@@ -71,7 +69,7 @@ pub fn collect_args(args: String) -> Result<Vec<TokenSeparators>, InvalidValueEr
     let mut delimiters: Vec<TokenSeparators> = vec![];
     let mut value_buffer: String = "".to_string();
 
-    if args.len() > 0{
+    if args.len() > 0 {
         for index in 0..args.len() {
             let current_char = args.chars().nth(index).unwrap();
             match TokenSeparators::from(args.get(index..index).unwrap()) {
@@ -83,29 +81,62 @@ pub fn collect_args(args: String) -> Result<Vec<TokenSeparators>, InvalidValueEr
                     }
                     delimiters.push(TokenSeparators::HexValue);
                     // Everything until the next value is a hex digit.
-                },
-                
+                }
+
                 TokenSeparators::Offset => {
                     if value_buffer.len() > 0 {
                         delimiters.push(TokenSeparators::Value(value_buffer));
                         value_buffer = "".to_string();
                     }
                     delimiters.push(TokenSeparators::Offset)
-                },
-                
+                }
+
                 // If it is not a delimiting character, push it onto the value buffer.
                 TokenSeparators::Invalid => {
                     value_buffer.push(current_char);
-                },
-                TokenSeparators::Value(_) => () // This is not a possible option in the TokenSeparators::from constructor
+                }
+                TokenSeparators::Value(_) => (), // This is not a possible option in the TokenSeparators::from constructor
             }
         }
     }
-    else{ 
+    else {
         return Err(InvalidValueError::from("Length of args passed was 0"));
     }
-    
+
     return Ok(delimiters);
+}
+
+/// Take a composed token list and compute a finalized address value.
+/// Parameters:
+///     - `args`: Arguments passed to the command, as a vector of TokenSeparators.
+/// Returns:
+///     - `address`: A fully computed address.
+fn compute_address_from_args(args: Vec<TokenSeparators>) -> Result<usize, InvalidValueError> {
+    let address: usize = 0;
+    let mut iterator = args.iter();
+    for index in 0..args.len() {
+        let next = iterator.next().unwrap();
+        match next {
+            TokenSeparators::HexValue => {
+                let next = iterator.next().unwrap();
+                match next {
+                    TokenSeparators::Value(data) => {
+                        //
+                    }
+                    _ => {
+                        return Err(InvalidValueError::from(
+                            "Value following hex specifier was invalid",
+                        ));
+                    }
+                }
+            }
+            TokenSeparators::Offset => todo!(),
+            TokenSeparators::Value(data) => {}
+            TokenSeparators::Invalid => (),
+        }
+    }
+
+    Ok(address)
 }
 
 /// Convert a String value into a constructed hex value.

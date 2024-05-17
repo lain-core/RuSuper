@@ -5,7 +5,8 @@ mod utils;
 use crate::emu::{self, VirtualMachine};
 use std::{
     collections::HashMap,
-    io::{self, Write}, iter::Map,
+    io::{self, Write},
+    iter::Map,
 };
 
 use self::utils::collect_args;
@@ -67,6 +68,7 @@ impl From<&str> for DebugCommandTypes {
     }
 }
 
+#[derive(PartialEq, Eq)]
 enum TokenSeparators {
     HexValue,
     Offset,
@@ -118,13 +120,12 @@ fn check_dbg_input(debug: &mut DebuggerState, vm: &mut VirtualMachine) {
     let trimmed: Vec<&str> = input_text.trim().split_whitespace().collect();
 
     if trimmed.len() > 0 {
-        let command: DebugCommandTypes = DebugCommandTypes::from(
-            trimmed[0].to_lowercase().as_ref()
-        );
+        let command: DebugCommandTypes =
+            DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
         let mut arguments: Vec<TokenSeparators> = vec![];
         if trimmed.len() > 1 {
             arguments = collect_args(trimmed[1..].concat()).unwrap();
-        } 
+        }
         // args = utils::collect_args(trimmed).unwrap();
         debug.debug_cmds[&command](arguments, vm);
     }
