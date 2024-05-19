@@ -52,6 +52,11 @@ pub fn dbg_print(
 ) {
 }
 
+/// Print the value at an absolute memory address.
+/// Parameters:
+///     - `address`:    Address to read from.
+///     - `_debug`:     Debugger State, unused.
+///     - `vm`:         Virtual Machine containing memory to read from.
 fn dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
     let byte_value = vm.memory.get_byte(address);
     let word_value = vm.memory.get_word(address);

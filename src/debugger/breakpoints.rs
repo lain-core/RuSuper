@@ -1,15 +1,5 @@
 use super::{utils, TokenSeparators, VirtualMachine};
 
-/**
- *  - b             Set breakpoint at current PC
- *      - b +N          Set breakpoint at memory address PC + N
- *      - b $XXXXXX     Set breakpoint at absolute address 0xXXXXXX
- *      - b tag
- *      - b tag+N
- *      - b show        Show breakpoints
- *      - b del X       Delete breakpoint X
- */
-
 /// Acts as the controller for all breakpoint functions.
 pub fn dbg_breakpoint(
     args: Vec<TokenSeparators>,

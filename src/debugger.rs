@@ -5,14 +5,18 @@ mod utils;
 use crate::emu::{self, VirtualMachine};
 use std::{
     collections::HashMap,
-    io::{self, Write},
-    iter::Map,
+    io::{self, Write}
 };
 
 use self::utils::{collect_args, InvalidValueError};
 /**************************************** Struct and Type definitions ***************************************************/
 
 /// Struct to track the operation of the debugger.
+/// is_stepping: if the debugger is running,
+/// steps_to_run: steps until next break,
+/// breakpoints: list of breakpoint addresses to stop at,
+/// watched_vars: variables being watched,
+/// tags:   hashmap of tagged addresses as a HashMap<tag_name, tag_address>.
 struct DebuggerState {
     pub is_stepping: bool,
     pub steps_to_run: usize,
@@ -54,6 +58,7 @@ impl DebuggerTags {
     }
 }
 
+/// Enum representing all of the potential commands for the debugger.
 #[derive(Hash, PartialEq, Eq)]
 enum DebugCommandTypes {
     Help,
@@ -87,12 +92,13 @@ impl From<&str> for DebugCommandTypes {
     }
 }
 
+// Parseable tokens in debugger inputs.
 #[derive(Debug, PartialEq, Eq)]
 enum TokenSeparators {
     HexValue,
     Offset,
-    Value(String),
-    Tag(String),
+    Value(String),      // Represents all numeric values (decimal and hex).
+    Tag(String),        // Represents all non-value values (tag strings).
     Invalid,
 }
 
@@ -109,6 +115,10 @@ impl From<&str> for TokenSeparators {
 type DebugFn = Box<dyn Fn(Vec<TokenSeparators>, &mut DebuggerState, &mut VirtualMachine)>;
 
 /**************************************** File Scope Functions **********************************************************/
+
+/// Construct the hash map of debugger commands.
+/// Returns:
+///     - HashMap<DebugCommandTypes, DebugFn>:  The mapping of enums to their function pointer.
 fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
     HashMap::from([
         (DebugCommandTypes::Help, Box::new(misc::dbg_help) as DebugFn),
@@ -132,6 +142,11 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
     ])
 }
 
+/// Parse the input from the debugger, decode the command, and then call it's associated function.
+/// Parameters:
+///     - `debug`:      Mutable pointer to the debugger state to utilize,
+///     - `vm`:         Pointer to the virtual machine to fetch values from memory or PC.
+///     - `debug_cmds`: The assembled table of debugger command->fn pointers.
 fn check_dbg_input(
     debug: &mut DebuggerState,
     vm: &mut VirtualMachine,
@@ -150,28 +165,39 @@ fn check_dbg_input(
         if trimmed.len() > 1 {
             arguments = collect_args(trimmed[1..].concat()).unwrap();
         }
-        // args = utils::collect_args(trimmed).unwrap();
+
+        // Call the debugger function.
         debug_cmds[&command](arguments, debug, vm);
     }
 }
 
+/// Run the debugger.
+/// Runs until `exit` command is received.
+/// # Parameters:
+///     - `vm`: Mutable Virtual Machine instance to run.
 pub fn run(mut vm: VirtualMachine) {
     let mut debugger = DebuggerState::new();
+
+    // Instantiate the table of debugger commands before starting the loop, so we don't churn a ton of memory.
     let debug_cmds: HashMap<DebugCommandTypes, DebugFn> = construct_cmd_table();
     loop {
+        // If the VM is running normally, just continue as usual.
         if vm.is_running && !debugger.is_stepping {
             vm.is_running = emu::step_cpu(&mut vm);
         }
+        // If the debugger is running the VM by stepping for N steps, check for how many steps are remaining.
         else if debugger.is_stepping {
             vm.is_running = emu::step_cpu(&mut vm);
             debugger.steps_to_run -= 1;
 
-            // When we are done running for N steps,
+            // Stop when we are finished running 
             if debugger.steps_to_run == 0 {
                 debugger.is_stepping = false;
                 vm.is_running = false;
             }
         }
+
+        // If the VM is not currently running, then prompt the user on the debugger.
         else {
             print!(">> ");
             io::stdout().flush().unwrap();
