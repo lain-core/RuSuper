@@ -1,7 +1,12 @@
-b $val tag ~> b$valtag
-b tag $val ~> btag$val
-b tag+val  ~> btag+val 
-b tag+$val ~> btag+$val
+b $808000 tag
+b tag $808000
+b 50 tag
+b tag 50
+b tag
 
-b example_index + 0x5000
-example_index + 0x5000
+/// Values where a tag must already exist to match to.
+b $0A + tag
+b tag + $0A
+b tag + 50
+b 50 + tag
+b tag + tag

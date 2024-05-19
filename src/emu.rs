@@ -43,7 +43,7 @@ pub struct VirtualMachine {
     pub cpu: cpu::CpuState,
     pub memory: memory::Memory,
     pub romdata: romdata::RomData,
-    pub clocks: ClockState,
+    clocks: ClockState,
     pub is_running: bool,
 }
 

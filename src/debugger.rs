@@ -5,7 +5,7 @@ mod utils;
 use crate::emu::{self, VirtualMachine};
 use std::{
     collections::HashMap,
-    io::{self, Write}
+    io::{self, Write},
 };
 
 use self::utils::{collect_args, InvalidValueError};
@@ -97,8 +97,9 @@ impl From<&str> for DebugCommandTypes {
 enum TokenSeparators {
     HexValue,
     Offset,
-    Value(String),      // Represents all numeric values (decimal and hex).
-    Tag(String),        // Represents all non-value values (tag strings).
+    Divider,       // Represents general divider character.
+    Value(String), // Represents all numeric values (decimal and hex).
+    Tag(String),   // Represents all non-value values (tag strings).
     Invalid,
 }
 
@@ -107,6 +108,7 @@ impl From<&str> for TokenSeparators {
         match value {
             "$" => Self::HexValue,
             "+" => Self::Offset,
+            " " => Self::Divider,
             _ => Self::Invalid,
         }
     }
@@ -163,7 +165,7 @@ fn check_dbg_input(
             DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
         let mut arguments: Vec<TokenSeparators> = vec![];
         if trimmed.len() > 1 {
-            arguments = collect_args(trimmed[1..].concat()).unwrap();
+            arguments = collect_args(trimmed[1..].to_vec()).unwrap();
         }
 
         // Call the debugger function.
@@ -190,13 +192,12 @@ pub fn run(mut vm: VirtualMachine) {
             vm.is_running = emu::step_cpu(&mut vm);
             debugger.steps_to_run -= 1;
 
-            // Stop when we are finished running 
+            // Stop when we are finished running
             if debugger.steps_to_run == 0 {
                 debugger.is_stepping = false;
                 vm.is_running = false;
             }
         }
-
         // If the VM is not currently running, then prompt the user on the debugger.
         else {
             print!(">> ");
