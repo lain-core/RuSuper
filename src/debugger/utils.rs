@@ -5,7 +5,7 @@ use std::{
 
 use crate::emu::VirtualMachine;
 
-use super::TokenSeparators;
+use super::TokenSeparator;
 
 /**************************************** Struct and Type definitions ***************************************************/
 
@@ -110,50 +110,50 @@ impl HexOperators for &str {
 /// Parameters:
 ///     - `args`:   The input from the user with the command removed and all other values concatenated.
 /// Returns:
-///     - `Ok(Vec<TokenSeparators>)`:   List of the arguments the user passed parsed into tokens.
+///     - `Ok(Vec<TokenSeparator>)`:   List of the arguments the user passed parsed into tokens.
 ///     - `Err(InvalidValueError)`:
-pub fn collect_args(argvec: Vec<&str>) -> Result<Vec<TokenSeparators>, InvalidValueError> {
-    let mut delimiters: Vec<TokenSeparators> = vec![];
+pub fn collect_args(argvec: Vec<&str>) -> Result<Vec<TokenSeparator>, InvalidValueError> {
+    let mut delimiters: Vec<TokenSeparator> = vec![];
     let mut value_buffer: String = String::new();
 
     let args = argvec.join(" ");
     if args.len() > 0 {
         for index in 0..args.len() {
             let current_char = args.chars().nth(index).unwrap();
-            match TokenSeparators::from(current_char.to_string().as_str()) {
+            match TokenSeparator::from(current_char.to_string().as_str()) {
                 // If a separator is found, clear the buffer of other characters and then push on the sepatator.
-                TokenSeparators::HexValue => {
+                TokenSeparator::HexValue => {
                     // println!("Found a Hex delimiter");
                     if value_buffer.len() > 0 {
-                        delimiters.push(TokenSeparators::Value(value_buffer));
+                        delimiters.push(TokenSeparator::Value(value_buffer));
                         value_buffer = "".to_string();
                     }
-                    delimiters.push(TokenSeparators::HexValue);
+                    delimiters.push(TokenSeparator::HexValue);
                     // Everything until the next value is a hex digit.
                 }
 
-                TokenSeparators::Offset => {
+                TokenSeparator::Offset => {
                     // println!("Found an offset delimiter");
                     if value_buffer.len() > 0 {
-                        delimiters.push(TokenSeparators::Value(value_buffer));
+                        delimiters.push(TokenSeparator::Value(value_buffer));
                         value_buffer = "".to_string();
                     }
-                    delimiters.push(TokenSeparators::Offset)
+                    delimiters.push(TokenSeparator::Offset)
                 }
 
                 // If it is not a delimiting character, push it onto the value buffer.
-                TokenSeparators::Invalid => {
+                TokenSeparator::Invalid => {
                     value_buffer.push(current_char);
                 }
                 // If we found a divider, flush the value buffer if it has something in it.
-                TokenSeparators::Divider => {
+                TokenSeparator::Divider => {
                     if value_buffer.len() > 0 {
-                        delimiters.push(TokenSeparators::Value(value_buffer));
+                        delimiters.push(TokenSeparator::Value(value_buffer));
                         value_buffer = String::new();
                     }
                 }
-                TokenSeparators::Value(_) => (), // This is not a possible option in the TokenSeparators::from constructor
-                TokenSeparators::Tag(_) => (), // This is not a possible option in the TokenSeparators::from Constructor
+                TokenSeparator::Value(_) => (), // This is not a possible option in the TokenSeparator::from constructor
+                TokenSeparator::Tag(_) => (), // This is not a possible option in the TokenSeparator::from Constructor
             }
         }
     }
@@ -162,7 +162,7 @@ pub fn collect_args(argvec: Vec<&str>) -> Result<Vec<TokenSeparators>, InvalidVa
     }
     // If there's anything left in the value buffer at the end throw it on.
     if value_buffer.len() > 0 {
-        delimiters.push(TokenSeparators::Value(value_buffer));
+        delimiters.push(TokenSeparator::Value(value_buffer));
     }
 
     // Lastly, pass it to collect_tags() to pick out what values from tags.
@@ -175,21 +175,21 @@ pub fn collect_args(argvec: Vec<&str>) -> Result<Vec<TokenSeparators>, InvalidVa
 /// Take a composed token list and compute a finalized address value.
 /// TODO: This function assumes that there are no tags; That will add complexity.
 /// Parameters:
-///     - `args`: Arguments passed to the command, as a vector of TokenSeparators.
+///     - `args`: Arguments passed to the command, as a vector of TokenSeparator.
 /// Returns:
 ///     - `address`: A fully computed address.
 pub fn compute_address_from_args(
-    args: Vec<TokenSeparators>,
+    args: Vec<TokenSeparator>,
     vm: &VirtualMachine,
 ) -> Result<usize, InvalidValueError> {
     let mut address: Option<usize> = None;
-    let mut modifiers: Vec<TokenSeparators> = vec![];
+    let mut modifiers: Vec<TokenSeparator> = vec![];
 
     for next in args.iter() {
         match next {
-            TokenSeparators::HexValue => modifiers.push(TokenSeparators::HexValue),
-            TokenSeparators::Offset => modifiers.push(TokenSeparators::Offset),
-            TokenSeparators::Value(data) => {
+            TokenSeparator::HexValue => modifiers.push(TokenSeparator::HexValue),
+            TokenSeparator::Offset => modifiers.push(TokenSeparator::Offset),
+            TokenSeparator::Value(data) => {
                 println!("Found Value: {}", data);
                 match apply_modifiers(&mut modifiers, vm, address, data.to_string()) {
                     Ok(newaddr) => address = Some(newaddr),
@@ -197,11 +197,11 @@ pub fn compute_address_from_args(
                 }
                 // When we find a numeric value, go through the list of modifiers and apply them where necessary.
             }
-            TokenSeparators::Tag(name) => {
+            TokenSeparator::Tag(name) => {
                 println!("Found Tag: {}", name);
             }
-            TokenSeparators::Invalid => (),
-            TokenSeparators::Divider => (),
+            TokenSeparator::Invalid => (),
+            TokenSeparator::Divider => (),
         }
     }
 
@@ -213,24 +213,24 @@ pub fn compute_address_from_args(
     }
 }
 
-/// Iterate through a vector of TokenSeparators, and for each TokenSeparator::Value, discern if it is a tag or a number.
+/// Iterate through a vector of TokenSeparator, and for each TokenSeparator::Value, discern if it is a tag or a number.
 /// # Parameters:
 ///     - `tokens`:         A list of tokens to digest.
 /// # Returns:
 ///     - A list of tokens, with TokenSeparator::Values replaced with tags where necessary.
-fn collect_tags(tokens: Vec<TokenSeparators>) -> Vec<TokenSeparators> {
-    let mut new_vec: Vec<TokenSeparators> = vec![];
+fn collect_tags(tokens: Vec<TokenSeparator>) -> Vec<TokenSeparator> {
+    let mut new_vec: Vec<TokenSeparator> = vec![];
 
     for token in tokens {
         match token {
-            TokenSeparators::Value(data) => {
+            TokenSeparator::Value(data) => {
                 // If the value is strictly numeric, just push it on as a value.
                 if data.is_decimal() || data.is_hex() {
-                    new_vec.push(TokenSeparators::Value(data));
+                    new_vec.push(TokenSeparator::Value(data));
                 }
                 else {
                     // For now, just push it straight on, but in the future we should probably do some more checks(?)
-                    new_vec.push(TokenSeparators::Tag(data));
+                    new_vec.push(TokenSeparator::Tag(data));
                 }
             }
             _ => new_vec.push(token),
@@ -240,9 +240,9 @@ fn collect_tags(tokens: Vec<TokenSeparators>) -> Vec<TokenSeparators> {
     new_vec
 }
 
-/// Take in a list of TokenSeparators, apply the modifiers to the values as desired, and spit out the resultant value.
+/// Take in a list of TokenSeparator, apply the modifiers to the values as desired, and spit out the resultant value.
 /// # Parameters:
-///     - `modifiers`:      List of TokenSeparators containing the modifiers to apply.
+///     - `modifiers`:      List of TokenSeparator containing the modifiers to apply.
 ///     - `vm`:             Virtual Machine, in case the resultant value is an offset from the current PC.
 ///     - `base_addr`:      Base address to operate upon. If `None`, use the PC as the base address.
 ///     - `value`:          Target value to digest, either a tag or a numeric value.
@@ -250,7 +250,7 @@ fn collect_tags(tokens: Vec<TokenSeparators>) -> Vec<TokenSeparators> {
 ///     - `Ok(value)`:                  The computed address value,
 ///     - `Err(InvalidValueError)`:     If any of the arguments passed to this function were mangled.
 fn apply_modifiers(
-    modifiers: &mut Vec<TokenSeparators>,
+    modifiers: &mut Vec<TokenSeparator>,
     vm: &VirtualMachine,
     base_addr: Option<usize>,
     value: String,
@@ -267,14 +267,14 @@ fn apply_modifiers(
             // Move right to left an apply the modifiers to the value.
             while let Some(modi) = modifiers.pop() {
                 // If the value is a hex value, convert it and replace the decimal expression of it.
-                if modi == TokenSeparators::HexValue {
+                if modi == TokenSeparator::HexValue {
                     println!("Applying Hex Modifier to value");
                     scratch_value = value.to_hex()?;
                 }
                 // If the value is an offset:
                 //      - Check if a base address has been set prior to this, and modify it if so.
                 //      - Otherwise just apply the offset to the current PC value and store it.
-                else if modi == TokenSeparators::Offset {
+                else if modi == TokenSeparator::Offset {
                     println!("Applying Offset Modifier to value");
                     match base_addr {
                         // If the address is none, the offset is relative to PC.
@@ -351,11 +351,11 @@ mod tests {
 
     /**************************************** Test Helpers **************************************************************/
 
-    /// Take two TokenSeparators vectors and check that all the items within are equal
+    /// Take two TokenSeparator vectors and check that all the items within are equal
     /// Parameters:
     ///     - `expected_vec`:   Vector of expected arguments.
     ///     - `test_vec`:       Vector of arguments under test.
-    fn _arg_vector_is_equal(expected_vec: Vec<TokenSeparators>, test_vec: Vec<TokenSeparators>) {
+    fn _arg_vector_is_equal(expected_vec: Vec<TokenSeparator>, test_vec: Vec<TokenSeparator>) {
         if expected_vec.len() != test_vec.len() {
             panic!("Mismatched arguments in test and resultant vector!");
         }
@@ -366,147 +366,188 @@ mod tests {
 
     /// Assemble the list of test cases which are driven purely by numeric literals.
     /// Returns:
-    ///     - `Vec<TokenSeparators>`: The list of all permutations of token.
-    fn assemble_literal_test_cases() -> Vec<Vec<TokenSeparators>> {
+    ///     - `Vec<TokenSeparator>`: The list of all permutations of token.
+    fn assemble_literal_test_cases() -> Vec<Vec<TokenSeparator>> {
         vec![
             // $808000
             // Hex Literal
             vec![
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("808000")),
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("808000")),
             ],
             // $808000+$0A
             // Hex Literal + Hex Offset
             vec![
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("808000")),
-                TokenSeparators::Offset,
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("0A")),
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("808000")),
+                TokenSeparator::Offset,
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("0A")),
             ],
             // $808000+50
             // Hex Literal + Decimal Offset
             vec![
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("808000")),
-                TokenSeparators::Offset,
-                TokenSeparators::Value(String::from("50")),
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("808000")),
+                TokenSeparator::Offset,
+                TokenSeparator::Value(String::from("50")),
             ],
             // +$0A
             // PC + Hex Offset
             vec![
-                TokenSeparators::Offset,
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("0A")),
+                TokenSeparator::Offset,
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("0A")),
             ],
             // +50
             // PC + Decimal Offset
             vec![
-                TokenSeparators::Offset,
-                TokenSeparators::Value(String::from("50")),
+                TokenSeparator::Offset,
+                TokenSeparator::Value(String::from("50")),
             ],
             // 50
             // Decimal Literal
-            vec![TokenSeparators::Value(String::from("50"))],
+            vec![TokenSeparator::Value(String::from("50"))],
             // $50
             // Hex Literal (Duplicate, to cover +50, 50, $50 and see all return diff)
             vec![
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("50")),
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("50")),
             ],
             // 50+$0A
             // Decimal Literal + Hex Offset
             vec![
-                TokenSeparators::Value(String::from("50")),
-                TokenSeparators::Offset,
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("0A")),
+                TokenSeparator::Value(String::from("50")),
+                TokenSeparator::Offset,
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("0A")),
             ],
             // 50 + 50
             // Decimal Literal + Decimal Offset
             vec![
-                TokenSeparators::Value(String::from("50")),
-                TokenSeparators::Offset,
-                TokenSeparators::Value(String::from("50")),
+                TokenSeparator::Value(String::from("50")),
+                TokenSeparator::Offset,
+                TokenSeparator::Value(String::from("50")),
             ],
         ]
     }
 
     /// Assemble the list of test cases which are driven by tag values.
-    fn assemble_tag_test_cases() -> Vec<Vec<TokenSeparators>> {
+    fn assemble_tag_test_cases() -> Vec<Vec<TokenSeparator>> {
         vec![
-            // $808000 tag
-            // Hex literal followed by tag
-            vec![
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("808000")),
-                TokenSeparators::Tag(String::from("tagname")),
-            ],
+            /******* Value After Tag *******/
             // tag $808000
             // Tag followed by Hex Literal
             vec![
-                TokenSeparators::Tag(String::from("tagname")),
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("808000")),
-            ],
-            // 50 tag
-            // Decimal literal followed by tag
-            vec![
-                TokenSeparators::Value(String::from("50")),
-                TokenSeparators::Tag(String::from("tagname")),
+                TokenSeparator::Tag(String::from("tagname")),
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("808000")),
             ],
             // tag 50
             // Tag followed by decimal literal
             vec![
-                TokenSeparators::Tag(String::from("tagname")),
-                TokenSeparators::Value(String::from("50")),
+                TokenSeparator::Tag(String::from("tagname")),
+                TokenSeparator::Value(String::from("50")),
             ],
-            // tag
-            // Just a tag name
-            vec![TokenSeparators::Tag(String::from("tagname"))],
-            // $0A + tag
-            // Hex literal offset by tag (Tag should exist prior)
+            // tag $808000 + $0A
+            // Tag, as specified by a hex literal + hex offset
             vec![
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("0A")),
-                TokenSeparators::Offset,
-                TokenSeparators::Tag(String::from("tagname")),
+                TokenSeparator::Tag(String::from("tagname")),
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("808000")),
+                TokenSeparator::Offset,
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("0A")),
+            ],
+            // tag $808000 + 50
+            // Tag, as specified by a hex literal + decimal offset
+            vec![
+                TokenSeparator::Tag(String::from("tagname")),
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("808000")),
+                TokenSeparator::Offset,
+                TokenSeparator::Value(String::from("50")),
             ],
             // tag + $0A
             // Tag with Hex Offset (Tag should exist prior)
             vec![
-                TokenSeparators::Tag(String::from("tagname")),
-                TokenSeparators::Offset,
-                TokenSeparators::HexValue,
-                TokenSeparators::Value(String::from("0A")),
+                TokenSeparator::Tag(String::from("tagname")),
+                TokenSeparator::Offset,
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("0A")),
             ],
             // tag + 50
             // Tag with Decimal Offset (Tag should exist prior)
             vec![
-                TokenSeparators::Tag(String::from("tagname")),
-                TokenSeparators::Offset,
-                TokenSeparators::Value(String::from("50")),
+                TokenSeparator::Tag(String::from("tagname")),
+                TokenSeparator::Offset,
+                TokenSeparator::Value(String::from("50")),
+            ],
+            /******* Value before Tag *******/
+            // $808000 tag
+            // Hex literal followed by tag
+            vec![
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("808000")),
+                TokenSeparator::Tag(String::from("tagname")),
+            ],
+            // 50 tag
+            // Decimal literal followed by tag
+            vec![
+                TokenSeparator::Value(String::from("50")),
+                TokenSeparator::Tag(String::from("tagname")),
+            ],
+            // $808000 + $0A tag
+            // tag, as defined as Hex literal + Hex offset
+            vec![
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("808000")),
+                TokenSeparator::Offset,
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("0A")),
+                TokenSeparator::Tag(String::from("tagname")),
+            ],
+            // $808000 + 50 tag
+            // tag, as defined as Hex Literal + Decimal Offset
+            vec![
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("808000")),
+                TokenSeparator::Offset,
+                TokenSeparator::Value(String::from("50")),
+                TokenSeparator::Tag(String::from("tagname")),
+            ],
+            // $0A + tag
+            // Hex literal offset by tag (Tag should exist prior)
+            vec![
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("0A")),
+                TokenSeparator::Offset,
+                TokenSeparator::Tag(String::from("tagname")),
             ],
             // 50 + tag
             // Decimal literal with tag offset (Tag should exist prior)
             vec![
-                TokenSeparators::Value(String::from("50")),
-                TokenSeparators::Offset,
-                TokenSeparators::Tag(String::from("tagname")),
+                TokenSeparator::Value(String::from("50")),
+                TokenSeparator::Offset,
+                TokenSeparator::Tag(String::from("tagname")),
+            ],
+            /******* Other Tag Cases *******/
+            // tag
+            // Just a tag name
+            vec![TokenSeparator::Tag(String::from("tagname"))],
+            // tag + tag
+            // Adding a tag value to itself (should exist prior)
+            vec![
+                TokenSeparator::Tag(String::from("tagname")),
+                TokenSeparator::Offset,
+                TokenSeparator::Tag(String::from("tagname")),
             ],
             // tag + tag2
             // 2 tag values (both should exist prior)
             vec![
-                TokenSeparators::Tag(String::from("tagname")),
-                TokenSeparators::Offset,
-                TokenSeparators::Tag(String::from("tagname2")),
-            ],
-            // tag + tag
-            // Adding a tag value to itself (should exist prior)
-            vec![
-                TokenSeparators::Tag(String::from("tagname")),
-                TokenSeparators::Offset,
-                TokenSeparators::Tag(String::from("tagname")),
+                TokenSeparator::Tag(String::from("tagname")),
+                TokenSeparator::Offset,
+                TokenSeparator::Tag(String::from("tagname2")),
             ],
         ]
     }
@@ -594,17 +635,24 @@ mod tests {
         #[test]
         fn test_collect_args() {
             let tag_vectors = vec![
-                vec!["$808000", "tagname"],
+                /****** Tag before value ******/
                 vec!["tagname", "$808000"],
-                vec!["50", "tagname"],
                 vec!["tagname", "50"],
-                vec!["tagname"],
-                vec!["$0A", "+", "tagname"],
+                vec!["tagname", "$808000", "+", "$0A"],
+                vec!["tagname", "$808000", "+", "50"],
                 vec!["tagname", "+", "$0A"],
                 vec!["tagname", "+", "50"],
+                /****** Value before tag ******/
+                vec!["$808000", "tagname"],
+                vec!["50", "tagname"],
+                vec!["$808000", "+", "$0A", "tagname"],
+                vec!["$808000", "+", "50", "tagname"],
+                vec!["$0A", "+", "tagname"],
                 vec!["50", "+", "tagname"],
-                vec!["tagname", "+", "tagname2"],
+                /****** Other Combinations ******/
+                vec!["tagname"],
                 vec!["tagname", "+", "tagname"],
+                vec!["tagname", "+", "tagname2"],
             ];
 
             let token_vectors = assemble_tag_test_cases();

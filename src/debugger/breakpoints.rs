@@ -1,8 +1,8 @@
-use super::{utils, TokenSeparators, VirtualMachine};
+use super::{utils, TokenSeparator, VirtualMachine};
 
 /// Acts as the controller for all breakpoint functions.
 pub fn dbg_breakpoint(
-    args: Vec<TokenSeparators>,
+    args: Vec<TokenSeparator>,
     debug: &mut super::DebuggerState,
     vm: &mut VirtualMachine,
 ) {

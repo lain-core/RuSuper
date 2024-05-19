@@ -1,4 +1,4 @@
-use super::{utils::HexOperators, TokenSeparators, VirtualMachine};
+use super::{utils::HexOperators, TokenSeparator, VirtualMachine};
 use crate::debugger::utils;
 use std::process::exit;
 
@@ -8,7 +8,7 @@ const NUM_ADDR_BYTES: usize = 3;
 /**************************************** File Scope Functions **********************************************************/
 /// Exits the program.
 pub fn dbg_exit(
-    _args: Vec<TokenSeparators>,
+    _args: Vec<TokenSeparator>,
     _debug: &mut super::DebuggerState,
     _vm: &mut VirtualMachine,
 ) {
@@ -16,7 +16,7 @@ pub fn dbg_exit(
 }
 
 pub fn dbg_help(
-    _args: Vec<TokenSeparators>,
+    _args: Vec<TokenSeparator>,
     _debug: &mut super::DebuggerState,
     _vm: &mut VirtualMachine,
 ) {
@@ -30,7 +30,7 @@ pub fn dbg_help(
 }
 
 pub fn dbg_invalid(
-    _args: Vec<TokenSeparators>,
+    _args: Vec<TokenSeparator>,
     _debug: &mut super::DebuggerState,
     _vm: &mut VirtualMachine,
 ) {
@@ -38,7 +38,7 @@ pub fn dbg_invalid(
 }
 
 pub fn dbg_continue(
-    _args: Vec<TokenSeparators>,
+    _args: Vec<TokenSeparator>,
     _debug: &mut super::DebuggerState,
     vm: &mut VirtualMachine,
 ) {
@@ -46,7 +46,7 @@ pub fn dbg_continue(
 }
 
 pub fn dbg_print(
-    args: Vec<TokenSeparators>,
+    args: Vec<TokenSeparator>,
     debug: &mut super::DebuggerState,
     vm: &mut VirtualMachine,
 ) {

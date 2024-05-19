@@ -94,7 +94,7 @@ impl From<&str> for DebugCommandTypes {
 
 /// Parseable tokens in debugger inputs.
 #[derive(Debug, PartialEq, Eq)]
-enum TokenSeparators {
+enum TokenSeparator {
     HexValue,
     Offset,
     Divider,       // Represents general divider character.
@@ -103,7 +103,7 @@ enum TokenSeparators {
     Invalid,
 }
 
-impl From<&str> for TokenSeparators {
+impl From<&str> for TokenSeparator {
     fn from(value: &str) -> Self {
         match value {
             "$" => Self::HexValue,
@@ -114,7 +114,7 @@ impl From<&str> for TokenSeparators {
     }
 }
 
-type DebugFn = Box<dyn Fn(Vec<TokenSeparators>, &mut DebuggerState, &mut VirtualMachine)>;
+type DebugFn = Box<dyn Fn(Vec<TokenSeparator>, &mut DebuggerState, &mut VirtualMachine)>;
 
 /**************************************** File Scope Functions **********************************************************/
 
@@ -163,7 +163,7 @@ fn check_dbg_input(
     if trimmed.len() > 0 {
         let command: DebugCommandTypes =
             DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
-        let mut arguments: Vec<TokenSeparators> = vec![];
+        let mut arguments: Vec<TokenSeparator> = vec![];
         if trimmed.len() > 1 {
             arguments = collect_args(trimmed[1..].to_vec()).unwrap();
         }

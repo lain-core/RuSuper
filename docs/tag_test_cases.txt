@@ -1,7 +1,17 @@
-b $808000 tag
 b tag $808000
-b 50 tag
 b tag 50
+b tag $808000 + $0A
+b tag $808000 + 50
+b tag +$0A
+b tag +50
+
+b $808000 tag
+b 50 tag
+b $808000 + $0A tag
+b $808000 + 50 tag
+b +$0A tag
+b +50 tag
+
 b tag
 
 /// Values where a tag must already exist to match to.
