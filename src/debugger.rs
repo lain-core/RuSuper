@@ -1,6 +1,6 @@
 mod breakpoints;
 mod misc;
-mod utils;
+mod parser;
 
 use crate::emu::{self, VirtualMachine};
 use std::{
@@ -8,7 +8,7 @@ use std::{
     io::{self, Write},
 };
 
-use self::utils::{collect_args, InvalidValueError};
+use self::parser::{str_to_args, InvalidDbgArgError};
 /**************************************** Struct and Type definitions ***************************************************/
 
 /// Struct to track the operation of the debugger.
@@ -22,7 +22,7 @@ struct DebuggerState {
     pub steps_to_run: usize,
     breakpoints: Vec<usize>,
     watched_vars: Vec<usize>,
-    tags: DebuggerTags,
+    tags: HashMap<String, usize>,
 }
 
 impl DebuggerState {
@@ -32,28 +32,7 @@ impl DebuggerState {
             steps_to_run: 0,
             watched_vars: Vec::new(),
             breakpoints: Vec::new(),
-            tags: DebuggerTags::new(),
-        }
-    }
-}
-
-struct DebuggerTags {
-    tags: HashMap<String, usize>,
-}
-impl DebuggerTags {
-    fn new() -> Self {
-        Self {
             tags: HashMap::new(),
-        }
-    }
-
-    fn get(&self, key: &str) -> Result<usize, InvalidValueError> {
-        match self.tags.get(key) {
-            Some(value) => Ok(*value),
-            None => Err(InvalidValueError::from(format!(
-                "Tag {} does not exist!",
-                key
-            ))),
         }
     }
 }
@@ -93,7 +72,7 @@ impl From<&str> for DebugCommandTypes {
 }
 
 /// Parseable tokens in debugger inputs.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum TokenSeparator {
     HexValue,
     Offset,
@@ -165,7 +144,7 @@ fn check_dbg_input(
             DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
         let mut arguments: Vec<TokenSeparator> = vec![];
         if trimmed.len() > 1 {
-            arguments = collect_args(trimmed[1..].to_vec()).unwrap();
+            arguments = str_to_args(trimmed[1..].to_vec(), &debug).unwrap();
         }
 
         // Call the debugger function.

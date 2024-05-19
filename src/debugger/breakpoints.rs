@@ -1,4 +1,4 @@
-use super::{utils, TokenSeparator, VirtualMachine};
+use super::{parser, TokenSeparator, VirtualMachine};
 
 /// Acts as the controller for all breakpoint functions.
 pub fn dbg_breakpoint(
@@ -6,7 +6,7 @@ pub fn dbg_breakpoint(
     debug: &mut super::DebuggerState,
     vm: &mut VirtualMachine,
 ) {
-    match utils::compute_address_from_args(args, vm) {
+    match parser::compute_address_from_args(args, vm) {
         Ok(value) => {
             debug.breakpoints.push(value);
             println!("Breakpoint set at {:#08X}", value);

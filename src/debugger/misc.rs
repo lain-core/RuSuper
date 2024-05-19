@@ -1,5 +1,5 @@
-use super::{utils::HexOperators, TokenSeparator, VirtualMachine};
-use crate::debugger::utils;
+use super::{parser::HexOperators, TokenSeparator, VirtualMachine};
+use crate::debugger::parser;
 use std::process::exit;
 
 /**************************************** Constant Values ***************************************************************/
