@@ -460,14 +460,33 @@ mod tests {
 
     }
 
-    #[test]
-    fn test_collect_tags() {
+    // #[test]
+    // fn test_collect_tags() {
 
-    }
+    // }
 
     #[test]
     fn test_apply_modifiers() {
+        let test_vm = VirtualMachine::new();
+        let literal_vectors = vec![
+            0x808000, // $808000
+            0x80800A, // $808000+$0A
+            0x808032, // $808000+50
+            0x80800A, // +$0A
+            0x808032, // +50
+            0x000032, // 50
+            0x000050, // $50
+            0x00003C, // 50+$0A
+            0x000064  // 50+50
 
+        ];
+        let token_vectors = assemble_literal_test_cases();
+
+        for (numerictest, tokentest) in zip(literal_vectors, token_vectors) {
+            let test_result = compute_address_from_args(tokentest, &test_vm).unwrap();
+            println!("Expected Result was {:#08X} Test Result was {:#08X}", numerictest, test_result);
+            assert_eq!(numerictest, test_result);
+        }
     }
 
     #[test]
