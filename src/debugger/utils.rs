@@ -1,13 +1,12 @@
-use std::{
-    fmt::{self, Debug},
-    thread::current,
-};
+use std::fmt::{self, Debug};
 
 use crate::emu::VirtualMachine;
 
 use super::TokenSeparators;
 
 /**************************************** Struct and Type definitions ***************************************************/
+
+/// Error to generate when a bad argument is passed to the debugger.
 #[derive(Debug, Clone)]
 pub struct InvalidValueError {
     value: String,
@@ -35,6 +34,7 @@ impl From<String> for InvalidValueError {
     }
 }
 
+/// Helpful operators for translating Strings -> Values
 pub trait HexOperators {
     fn is_hex(&self) -> bool;
     fn is_decimal(&self) -> bool;
@@ -42,6 +42,12 @@ pub trait HexOperators {
 }
 
 impl HexOperators for String {
+    /// Check if a value is constructed only from hex digits. 
+    /// # Parameters:
+    ///     - `self`
+    /// # Returns:
+    ///     - `true`    if the string was a contained hex value,
+    ///     - `false`   if the string was not a hex value.
     fn is_hex(&self) -> bool {
         for char in self.chars() {
             if !char.is_digit(16) {
@@ -51,6 +57,12 @@ impl HexOperators for String {
         return true;
     }
 
+    /// Check if a value is constructed only from decimal digits.
+    /// # Parameters:
+    ///     - `self`
+    /// # Returns:
+    ///     - `true`    if the string consists of only decimal digits.
+    ///     - `false`   if the string was not only decimal digits. 
     fn is_decimal(&self) -> bool {
         for char in self.chars() {
             if !char.is_digit(10) {
@@ -214,7 +226,15 @@ fn collect_tags(tokens: Vec<TokenSeparators>) -> Vec<TokenSeparators> {
     new_vec
 }
 
-///
+/// Take in a list of TokenSeparators, apply the modifiers to the values as desired, and spit out the resultant value.
+/// # Parameters:
+///     - `modifiers`:      List of TokenSeparators containing the modifiers to apply.
+///     - `vm`:             Virtual Machine, in case the resultant value is an offset from the current PC.
+///     - `base_addr`:      Base address to operate upon. If `None`, use the PC as the base address.
+///     - `value`:          Target value to digest, either a tag or a numeric value.
+/// # Returns:
+///     - `Ok(value)`:                  The computed address value,
+///     - `Err(InvalidValueError)`:     If any of the arguments passed to this function were mangled.
 fn apply_modifiers(
     modifiers: &mut Vec<TokenSeparators>,
     vm: &VirtualMachine,
@@ -308,3 +328,162 @@ fn string_to_hex(text: &str) -> Result<usize, InvalidValueError> {
 }
 
 /**************************************** Tests *************************************************************************/
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::iter::zip;
+    use rand::Rng;
+
+    /**************************************** Test Helpers **************************************************************/
+
+    /// Take two TokenSeparators vectors and check that all the items within are equal
+    /// Parameters: 
+    ///     - `expected_vec`:   Vector of expected arguments.
+    ///     - `test_vec`:       Vector of arguments under test.
+    fn _arg_vector_is_equal(expected_vec: Vec<TokenSeparators>, test_vec: Vec<TokenSeparators>) {
+        if expected_vec.len() != test_vec.len() {
+            panic!("Mismatched arguments in test and resultant vector!");
+        }
+        for index in 0..test_vec.len() {
+            assert_eq!(expected_vec[index], test_vec[index]);
+        }
+    }
+
+    /// Assemble the list of test ca    use super::*;ses which are driven purely by numeric literals.
+    /// Returns:
+    ///     - `Vec<TokenSeparators>`: The list of all permutations of token.
+    fn assemble_literal_test_cases() -> Vec<Vec<TokenSeparators>> {
+        vec![
+                    // $808000
+                    vec![
+                        TokenSeparators::HexValue,
+                        TokenSeparators::Value(String::from("808000"))
+                    ],
+                    // $808000+$0A
+                    vec![
+                        TokenSeparators::HexValue,
+                        TokenSeparators::Value(String::from("808000")),
+                        TokenSeparators::Offset,
+                        TokenSeparators::HexValue,
+                        TokenSeparators::Value(String::from("0A"))
+                    ],
+                    // $808000+50
+                    vec![
+                        TokenSeparators::HexValue,
+                        TokenSeparators::Value(String::from("808000")),
+                        TokenSeparators::Offset,
+                        TokenSeparators::Value(String::from("50"))
+                    ],
+                    // +$0A
+                    vec![
+                        TokenSeparators::Offset,
+                        TokenSeparators::HexValue,
+                        TokenSeparators::Value(String::from("0A"))
+                    ],
+                    // +50
+                    vec![
+                        TokenSeparators::Offset,
+                        TokenSeparators::Value(String::from("50"))
+                    ],
+                    // 50
+                    vec![
+                        TokenSeparators::Value(String::from("50"))
+                    ],
+                    // $50
+                    vec![
+                        TokenSeparators::HexValue,
+                        TokenSeparators::Value(String::from("50"))
+                    ],
+                    // 50+$0A
+                    vec![
+                        TokenSeparators::Value(String::from("50")),
+                        TokenSeparators::Offset,
+                        TokenSeparators::HexValue,
+                        TokenSeparators::Value(String::from("0A"))
+                    ],
+                    // 50 + 50
+                    vec![
+                        TokenSeparators::Value(String::from("50")),
+                        TokenSeparators::Offset,
+                        TokenSeparators::Value(String::from("50"))
+                    ]
+        ]
+    }
+
+
+
+    /**************************************** Unit Test Implementations *************************************************/
+
+    #[test]
+    fn test_collect_args() {
+        let literal_vectors = vec![
+            String::from("$808000"),
+            String::from("$808000+$0A"),
+            String::from("$808000+50"),
+            String::from("+$0A"),
+            String::from("+50"),
+            String::from("50"),
+            String::from("$50"),
+            String::from("50+$0A"),
+            String::from("50+50"),
+        ];
+        let token_vectors = assemble_literal_test_cases();
+
+        for (stringtest, tokentest) in zip(literal_vectors, token_vectors){
+            assert_eq!( collect_args(stringtest).unwrap(), tokentest);
+        }
+    }
+
+    #[test]
+    fn test_compute_address_from_args() {
+        let test_vm = VirtualMachine::new();
+        let literal_vectors = vec![
+            0x808000, // $808000
+            0x80800A, // $808000+$0A
+            0x808032, // $808000+50
+            0x80800A, // +$0A
+            0x808032, // +50
+            0x000032, // 50
+            0x000050, // $50
+            0x00003C, // 50+$0A
+            0x000064  // 50+50
+
+        ];
+        let token_vectors = assemble_literal_test_cases();
+
+        for (numerictest, tokentest) in zip(literal_vectors, token_vectors) {
+            let test_result = compute_address_from_args(tokentest, &test_vm).unwrap();
+            println!("Expected Result was {:#08X} Test Result was {:#08X}", numerictest, test_result);
+            assert_eq!(numerictest, test_result);
+        }
+
+    }
+
+    #[test]
+    fn test_collect_tags() {
+
+    }
+
+    #[test]
+    fn test_apply_modifiers() {
+
+    }
+
+    #[test]
+    fn test_string_to_hex() {
+        // Test 100 Random hex values.
+        for _step in 0..100 {
+            let value: usize = rand::thread_rng().gen_range(0x000000 .. 0xFFFFFF);
+            let val_as_string = format!("{:#08X}", value);
+            assert_eq!(value, string_to_hex(&val_as_string).unwrap());
+        } 
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_string_to_hex() {
+        string_to_hex("$invalid").unwrap();
+    }
+
+}
