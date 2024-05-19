@@ -11,8 +11,8 @@ use super::{DebuggerState, TokenSeparator};
 ///     1. collect_args() takes a set of arguments as a list of strings which are split by spaces, and then encodes them as a list of their token types.
 ///     2. collect_tags() takes a list of tokens and converts Value() to Tag() where an invalid numeric value is found.
 ///     3. validate_tag_offsets() takes a list of tokens and converts Tag()s back into Value()s when they already exist.
-///     4. apply_modifiers() takes a list of tokens and applies all of the modifiers to values where necessary.
-///     5. compute_address_from_args() takes a list of tokens, and computes the finalized address by calling apply_modifiers().
+///     4. compute_address_from_args() takes a list of tokens, and computes the finalized address by calling apply_modifiers().
+///         * apply_modifiers() takes a list of tokens and applies all of the modifiers to values where necessary.
 
 /**************************************** Struct and Type definitions ***************************************************/
 
@@ -126,10 +126,12 @@ pub fn str_to_args(
 ) -> Result<Vec<TokenSeparator>, InvalidDbgArgError> {
     let mut arg_result: Result<Vec<TokenSeparator>, InvalidDbgArgError> =
         Err(InvalidDbgArgError::from("Invalid Arguments"));
+
     // First Pass: Convert the list of strings into a list of tokens as-is.
     if let Ok(delimiters) = collect_args(argvec, &mut debug) {
         // Second Pass: Convert all of the TokenSeparator::Value()s which correspond to tags into tags
         arg_result = Ok(collect_tags(delimiters));
+
         // Third Pass: Look through all of the tags, check if they already exist and convert them back into values where possible.
         //      Any remaining tags will have to be new tags.
         match validate_tag_offsets(arg_result.unwrap(), debug) {
@@ -201,20 +203,17 @@ fn collect_args(
             match TokenSeparator::from(current_char.to_string().as_str()) {
                 // If a separator is found, clear the buffer of other characters and then push on the sepatator.
                 TokenSeparator::HexValue => {
-                    // println!("Found a Hex delimiter");
                     if value_buffer.len() > 0 {
                         delimiters.push(TokenSeparator::Value(value_buffer));
-                        value_buffer = "".to_string();
+                        value_buffer = String::new();
                     }
                     delimiters.push(TokenSeparator::HexValue);
-                    // Everything until the next value is a hex digit.
                 }
 
                 TokenSeparator::Offset => {
-                    // println!("Found an offset delimiter");
                     if value_buffer.len() > 0 {
                         delimiters.push(TokenSeparator::Value(value_buffer));
-                        value_buffer = "".to_string();
+                        value_buffer = String::new();
                     }
                     delimiters.push(TokenSeparator::Offset)
                 }
@@ -362,10 +361,8 @@ fn apply_modifiers(
 
         // Digest any modifiers found.
         if modifiers.len() > 0 {
-            let mut lastSeparator: Option<TokenSeparator> = None;
-            let mut currSeparator: Option<TokenSeparator> = modifiers.pop();
             // Move right to left an apply the modifiers to the value.
-            while let Some(ref modi) = currSeparator {
+            while let Some(ref modi) = modifiers.pop() {
                 // If the value is a hex value, convert it and replace the decimal expression of it.
                 if *modi == TokenSeparator::HexValue {
                     println!("Applying Hex Modifier to value");
@@ -386,9 +383,6 @@ fn apply_modifiers(
                         }
                     }
                 }
-
-                lastSeparator = currSeparator;
-                currSeparator = modifiers.pop();
             }
         }
     }
@@ -406,16 +400,18 @@ fn string_to_hex(text: &str) -> Result<usize, InvalidDbgArgError> {
     let mut value = text.to_string().clone();
 
     if value.starts_with("$") {
-        value = value
-            .strip_prefix("$")
-            .expect("String did not begin with $")
-            .to_string();
+        value = String::from(
+            value
+                .strip_prefix("$")
+                .expect("String did not begin with $"),
+        );
     }
     if value.starts_with("0x") {
-        value = value
-            .strip_prefix("0x")
-            .expect("String did not begin with 0x")
-            .to_string();
+        value = String::from(
+            value
+                .strip_prefix("0x")
+                .expect("String did not begin with 0x"),
+        );
     }
 
     if value.to_string().is_hex() {
@@ -933,6 +929,7 @@ mod tests {
     #[test]
     fn test_string_to_hex() {
         // Test 100 Random hex values.
+        // We can test across the entire address range, but it does take a lot longer.
         for _step in 0..100 {
             let value: usize = rand::thread_rng().gen_range(0x000000..0xFFFFFF);
             let val_as_string = format!("{:#08X}", value);

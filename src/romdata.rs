@@ -598,7 +598,9 @@ fn write_rom_mirror(
 ///     - `Ok()`:           If written Ok.
 ///     - `RomReadError`:   If process failed.
 fn _write_ex_hi_rom(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
-    return Err(RomReadError::from("Unimplemented for ExHiRom".to_string()));
+    return Err(RomReadError::from(String::from(
+        "Unimplemented for ExHiRom",
+    )));
 }
 
 /// Write an exhirom mirror into memory.
@@ -615,7 +617,9 @@ fn _write_ex_hi_rom_mirror(
     rom: &Vec<u8>,
     mem_ptr: &mut memory::Memory,
 ) -> Result<(), RomReadError> {
-    return Err(RomReadError::from("Unimplemented for ExHiRom".to_string()));
+    return Err(RomReadError::from(String::from(
+        "Unimplemented for ExHiRom",
+    )));
 }
 
 /// Find and grab the header from target rom if available.
