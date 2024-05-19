@@ -1,37 +1,18 @@
-use super::VirtualMachine;
-
-/**
- *  - b             Set breakpoint at current PC
- *      - b +N          Set breakpoint at memory address PC + N
- *      - b $XXXXXX     Set breakpoint at absolute address 0xXXXXXX
- *      - b tag
- *      - b tag+N
- *      - b show        Show breakpoints
- *      - b del X       Delete breakpoint X
- */
+use super::{utils, TokenSeparators, VirtualMachine};
 
 /// Acts as the controller for all breakpoint functions.
-pub fn dbg_breakpoint(args: Vec<&str>, vm: &mut VirtualMachine) {
-    vm.cpu.print_state();
-    println!("unimplemented");
-}
-
-pub fn dbg_breakpoint_here(args: Vec<&str>, vm: &mut VirtualMachine) {
-    println!("unimplemented");
-}
-
-pub fn dbg_breakpoint_offset(args: Vec<&str>, vm: &mut VirtualMachine) {
-    println!("unimplemented");
-}
-
-pub fn dbg_breakpoint_tag(args: Vec<&str>, vm: &mut VirtualMachine) {
-    println!("unimplemented");
-}
-
-pub fn dbg_breakpoint_show(args: Vec<&str>, vm: &mut VirtualMachine) {
-    println!("unimplemented");
-}
-
-pub fn dbg_breakpoint_remove(args: Vec<&str>, vm: &mut VirtualMachine) {
-    println!("unimplemented");
+pub fn dbg_breakpoint(
+    args: Vec<TokenSeparators>,
+    debug: &mut super::DebuggerState,
+    vm: &mut VirtualMachine,
+) {
+    match utils::compute_address_from_args(args, vm) {
+        Ok(value) => {
+            debug.breakpoints.push(value);
+            println!("Breakpoint set at {:#08X}", value);
+        }
+        Err(e) => {
+            println!("{}", e);
+        }
+    }
 }

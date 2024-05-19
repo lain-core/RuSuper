@@ -1432,6 +1432,11 @@ impl CpuState {
              ,self.pc, self.acc, self.sp, self.data_bank, self.prog_bank, self.direct_page, self.flags, self.flags
         );
     }
+
+    /// Compose a fully-formed absolute address from the current PC and return it.
+    pub fn get_pc(&self) -> usize {
+        memory::compose_address(self.prog_bank, self.pc)
+    }
 }
 /**************************************** File Scope Functions **********************************************************/
 

@@ -1,0 +1,7 @@
+b $val tag ~> b$valtag
+b tag $val ~> btag$val
+b tag+val  ~> btag+val 
+b tag+$val ~> btag+$val
+
+b example_index + 0x5000
+example_index + 0x5000
