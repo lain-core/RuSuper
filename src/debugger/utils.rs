@@ -350,7 +350,7 @@ mod tests {
         }
     }
 
-    /// Assemble the list of test ca    use super::*;ses which are driven purely by numeric literals.
+    /// Assemble the list of test cases which are driven purely by numeric literals.
     /// Returns:
     ///     - `Vec<TokenSeparators>`: The list of all permutations of token.
     fn assemble_literal_test_cases() -> Vec<Vec<TokenSeparators>> {

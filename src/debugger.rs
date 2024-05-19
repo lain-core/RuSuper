@@ -92,7 +92,7 @@ impl From<&str> for DebugCommandTypes {
     }
 }
 
-// Parseable tokens in debugger inputs.
+/// Parseable tokens in debugger inputs.
 #[derive(Debug, PartialEq, Eq)]
 enum TokenSeparators {
     HexValue,
