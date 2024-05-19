@@ -531,6 +531,21 @@ mod tests {
                 TokenSeparator::Offset,
                 TokenSeparator::Tag(String::from("tagname")),
             ],
+            // +$0A tag
+            // tag as Hex offset from PC
+            vec![
+                TokenSeparator::Offset,
+                TokenSeparator::HexValue,
+                TokenSeparator::Value(String::from("0A")),
+                TokenSeparator::Tag(String::from("tagname")),
+            ],
+            // +50 tag
+            // tag as decimal offset from PC
+            vec![
+                TokenSeparator::Offset,
+                TokenSeparator::Value(String::from("50")),
+                TokenSeparator::Tag(String::from("tagname")),
+            ],
             /******* Other Tag Cases *******/
             // tag
             // Just a tag name
@@ -649,6 +664,8 @@ mod tests {
                 vec!["$808000", "+", "50", "tagname"],
                 vec!["$0A", "+", "tagname"],
                 vec!["50", "+", "tagname"],
+                vec!["+", "$0A", "tagname"],
+                vec!["+", "50", "tagname"],
                 /****** Other Combinations ******/
                 vec!["tagname"],
                 vec!["tagname", "+", "tagname"],
@@ -662,8 +679,129 @@ mod tests {
             }
         }
 
-        // #[test]
-        // fn test_collect_tags() {}
+        #[test]
+        fn test_collect_tags() {
+            let test_token_vectors = vec![
+                /****** Tag before value ******/
+                // tag $808000
+                vec![
+                    TokenSeparator::Value(String::from("tagname")),
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("808000")),
+                ],
+                // tag 50
+                vec![
+                    TokenSeparator::Value(String::from("tagname")),
+                    TokenSeparator::Value(String::from("50")),
+                ],
+                // tag $808000 + $0A
+                vec![
+                    TokenSeparator::Value(String::from("tagname")),
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("808000")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("0A")),
+                ],
+                // tag $808000 + 50
+                vec![
+                    TokenSeparator::Value(String::from("tagname")),
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("808000")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Value(String::from("50")),
+                ],
+                // tag +$0A
+                vec![
+                    TokenSeparator::Value(String::from("tagname")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("0A")),
+                ],
+                // tag +50
+                vec![
+                    TokenSeparator::Value(String::from("tagname")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Value(String::from("50")),
+                ],
+                /****** Value before tag ******/
+                // $808000 tag
+                vec![
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("808000")),
+                    TokenSeparator::Value(String::from("tagname")),
+                ],
+                // 50 tag
+                vec![
+                    TokenSeparator::Value(String::from("50")),
+                    TokenSeparator::Value(String::from("tagname")),
+                ],
+                // $808000 + $0A tag
+                vec![
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("808000")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("0A")),
+                    TokenSeparator::Value(String::from("tagname")),
+                ],
+                // $808000 + 50 tag
+                vec![
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("808000")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Value(String::from("50")),
+                    TokenSeparator::Value(String::from("tagname")),
+                ],
+                // $0A + tag
+                vec![
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("0A")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Tag(String::from("tagname")),
+                ],
+                // 50 + tag
+                vec![
+                    TokenSeparator::Value(String::from("50")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Tag(String::from("tagname")),
+                ],
+                // +$0A tag
+                vec![
+                    TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from("0A")),
+                    TokenSeparator::Value(String::from("tagname")),
+                ],
+                // +50 tag
+                vec![
+                    TokenSeparator::Offset,
+                    TokenSeparator::Value(String::from("50")),
+                    TokenSeparator::Value(String::from("tagname")),
+                ],
+                /****** Other tag configurations ******/
+                // tag
+                vec![TokenSeparator::Value(String::from("tagname"))],
+                // tag + tag
+                vec![
+                    TokenSeparator::Value(String::from("tagname")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Value(String::from("tagname")),
+                ],
+                // tag + tag2
+                vec![
+                    TokenSeparator::Value(String::from("tagname")),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Value(String::from("tagname2")),
+                ],
+            ];
+
+            let expected_token_vectors = assemble_tag_test_cases();
+            for (tokentest, expectedtest) in zip(test_token_vectors, expected_token_vectors) {
+                let test_result = collect_tags(tokentest);
+                assert_eq!(test_result, expectedtest);
+            }
+        }
 
         // #[test]
         // fn test_compute_address_from_args() {}

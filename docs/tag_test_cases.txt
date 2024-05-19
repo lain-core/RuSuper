@@ -1,3 +1,4 @@
+/* Tag before value */
 b tag $808000
 b tag 50
 b tag $808000 + $0A
@@ -5,18 +6,25 @@ b tag $808000 + 50
 b tag +$0A
 b tag +50
 
+/* Value before tag */
 b $808000 tag
 b 50 tag
 b $808000 + $0A tag
 b $808000 + 50 tag
+b $0A + tag
+b 50 + tag
 b +$0A tag
 b +50 tag
 
+/* Others */
 b tag
+b tag + tag
+b tag + tag2
 
 /// Values where a tag must already exist to match to.
-b $0A + tag
 b tag + $0A
 b tag + 50
+b $0A + tag
 b 50 + tag
 b tag + tag
+b tag + tag2
