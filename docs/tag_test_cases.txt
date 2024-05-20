@@ -20,6 +20,7 @@ b +50 tag
 b tag
 b tag + tag
 b tag + tag2
+b tag + tag2 tag3
 
 /// Values where a tag must already exist to match to.
 b tag + $0A
@@ -28,6 +29,7 @@ b $0A + tag
 b 50 + tag
 b tag + tag
 b tag + tag2
+b tag + tag2 tag3
 
 if offset is immediately followed by or following a tag name, look it up
     spit it out if it is not found
