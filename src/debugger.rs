@@ -5,10 +5,11 @@ mod parser;
 use crate::emu::{self, VirtualMachine};
 use std::{
     collections::HashMap,
+    fmt::Debug,
     io::{self, Write},
 };
 
-use self::parser::str_to_args;
+use self::parser::{str_to_args, DebugTokenStream};
 /**************************************** Struct and Type definitions ***************************************************/
 
 /// Struct to track the operation of the debugger.
@@ -106,7 +107,7 @@ impl From<&str> for TokenSeparator {
     }
 }
 
-type DebugFn = Box<dyn Fn(Vec<TokenSeparator>, &mut DebuggerState, &mut VirtualMachine)>;
+type DebugFn = Box<dyn Fn(DebugTokenStream, &mut DebuggerState, &mut VirtualMachine)>;
 
 /**************************************** File Scope Functions **********************************************************/
 
@@ -150,7 +151,7 @@ fn check_dbg_input(
     if trimmed.len() > 0 {
         let command: DebugCommandTypes =
             DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
-        let mut arguments: Vec<TokenSeparator> = vec![];
+        let mut arguments: DebugTokenStream = vec![];
         if trimmed.len() > 1 {
             arguments = str_to_args(trimmed[1..].to_vec(), &debug).unwrap();
         }
