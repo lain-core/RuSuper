@@ -12,6 +12,8 @@ use std::{
 use self::parser::{str_to_args, DebugTokenStream};
 /**************************************** Struct and Type definitions ***************************************************/
 
+pub type DebugTagTable = HashMap<String, usize>;
+
 /// Struct to track the operation of the debugger.
 /// is_stepping: if the debugger is running,
 /// steps_to_run: steps until next break,
@@ -23,7 +25,7 @@ struct DebuggerState {
     pub steps_to_run: usize,
     breakpoints: Vec<usize>,
     _watched_vars: Vec<usize>,
-    tags: HashMap<String, usize>,
+    tags: DebugTagTable,
 }
 
 impl DebuggerState {
