@@ -205,7 +205,6 @@ pub fn str_to_args(
 }
 
 /// Take a composed token list and compute a finalized address value.
-/// TODO: This function assumes that there are no tags; That will add complexity.
 /// Parameters:
 ///     - `args`: Arguments passed to the command, as a vector of TokenSeparator.
 ///     - `vm`:     Virtual machine to access memory or program counter from.
@@ -297,27 +296,40 @@ fn collect_args(argvec: Vec<&str>) -> Result<Vec<TokenSeparator>, InvalidDbgArgE
 }
 
 /// Iterate through a vector of TokenSeparator, and for each TokenSeparator::Value, discern if it is a tag or a number.
+/// A tag is any value which is not parseable as a decimal or hexadecimal value,
+///     or a potential hexadecimal value which is not led by a TokenSeparator::HexValue.
 /// # Parameters:
-///     - `tokens`:         A list of tokens to digest.
+///     - `tokens`:         A list of tokens to digest, where all tags are represented as TokenSeparator::Value(tagname).
 /// # Returns:
-///     - A list of tokens, with TokenSeparator::Values replaced with tags where necessary.
+///     - A list of tokens, with TokenSeparator::Values, where all tags are represented as TokenSeparator::Tag(tagname).
 fn collect_tags(tokens: Vec<TokenSeparator>) -> Vec<TokenSeparator> {
+    let mut last_token: Option<TokenSeparator> = None;
     let mut new_vec: Vec<TokenSeparator> = vec![];
 
     for token in tokens {
         match token {
-            TokenSeparator::Value(data) => {
+            TokenSeparator::Value(ref data) => {
                 // If the value is strictly numeric, just push it on as a value.
-                if data.is_decimal() || data.is_hex() {
-                    new_vec.push(TokenSeparator::Value(data));
+                if data.is_decimal() {
+                    new_vec.push(TokenSeparator::Value(data.to_string()));
+                }
+                // If the value is in hex, check that the modifier was found to be present, or else we are looking at a tag name.
+                else if data.is_hex() {
+                    if let Some(TokenSeparator::HexValue) = last_token {
+                        new_vec.push(TokenSeparator::Value(data.to_string()));
+                    }
+                    else {
+                        new_vec.push(TokenSeparator::Tag(data.to_string()));
+                    }
                 }
                 // Otherwise put it on as a tag.
                 else {
-                    new_vec.push(TokenSeparator::Tag(data));
+                    new_vec.push(TokenSeparator::Tag(data.to_string()));
                 }
             }
-            _ => new_vec.push(token),
+            _ => new_vec.push(token.clone()),
         }
+        last_token = Some(token);
     }
 
     new_vec
@@ -326,10 +338,10 @@ fn collect_tags(tokens: Vec<TokenSeparator>) -> Vec<TokenSeparator> {
 /// Parse a full list of arguments and check that if any tags within are being modified by an offset.
 ///     If they are, they must exist at the time we are checking, or else we have been handed a bad argument.
 /// Parameters:
-///     - `tokens`:     Mutable list of TokenSeparator tokens to parse for tags and offsets.
+///     - `tokens`:     Mutable list of TokenSeparator tokens, where Tags are represented as Tag(tagname).
 ///     - `debug`:      Debugger with the list of tags to match from.
 /// Returns:
-///     - `Ok(Vec<TokenSeparator>)`:    A new list of tokens, with the tags that could be found replaced by absolute values where possible.
+///     - `Ok(Vec<TokenSeparator>)`:    A new list of tokens, with the tags represented as Value(*tagname) where possible.
 ///     - `Err(InvalidDbgArgError)`:    An error informing the user the first tag which is invalid.
 fn validate_tag_offsets(
     mut tokens: Vec<TokenSeparator>, debug: &DebuggerState,
@@ -713,6 +725,13 @@ mod tests {
                     TokenSeparator::Value(String::from(TEST_TAG_NAME2)),
                     TokenSeparator::Value(String::from(TEST_TAG_NAME3)),
                 ],
+                // tag3 tag1 + tag2
+                vec![
+                    TokenSeparator::Value(String::from(TEST_TAG_NAME3)),
+                    TokenSeparator::Value(String::from(TEST_TAG_NAME)),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Value(String::from(TEST_TAG_NAME2)),
+                ],
             ]
         }
 
@@ -855,6 +874,14 @@ mod tests {
                     TokenSeparator::Offset,
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME2)),
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME3)),
+                ],
+                // tag3 tag1 + tag2
+                // 2 tags added = 3rd new tag
+                vec![
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME3)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME2)),
                 ],
             ]
         }
@@ -1000,6 +1027,14 @@ mod tests {
                     TokenSeparator::Value(String::from(TEST_WIDE_HEX_VALUE)),
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME3)),
                 ],
+                // tag3 tag + tag2
+                // 2 tag values (both should exist prior) equate to one new tag.
+                vec![
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME3)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Offset,
+                    TokenSeparator::Value(String::from(TEST_WIDE_HEX_VALUE)),
+                ],
             ]
         }
     }
@@ -1110,7 +1145,8 @@ mod tests {
                 vec![TEST_TAG_NAME],
                 vec![TEST_TAG_NAME, "+", TEST_TAG_NAME],
                 vec![TEST_TAG_NAME, "+", TEST_TAG_NAME2],
-                vec![TEST_TAG_NAME, "+", TEST_TAG_NAME2, "tagname3"],
+                vec![TEST_TAG_NAME, "+", TEST_TAG_NAME2, TEST_TAG_NAME3],
+                vec![TEST_TAG_NAME3, TEST_TAG_NAME, "+", TEST_TAG_NAME2],
             ];
             let token_vectors = token_tag_as_value();
             for (test_input, expected_result) in zip(string_vectors, token_vectors) {
