@@ -299,21 +299,21 @@ fn validate_tag_offsets(
                     }
                     else {
                         new_tokens.push(TokenSeparator::Offset);
-
                     }
                 }
+                // If the offset applies to a value which is NOT a tag, we will put it on the buffer of separators
                 else {
-                    new_tokens.push(TokenSeparator::Offset);
+                    separator_buffer.push(TokenSeparator::Offset);
                 }
             }
             Some(TokenSeparator::Tag(ref tagname)) => {
                 // If the last value was an offset, then this tag MUST be derefable, or we can throw an error.
                 // If the last value was NOT an offset, then this could be a new tag.
                 if let Some(tagvalue) = debug.tags.get(tagname) {
+                    // TODO: Tags must be able to be STORED as hex or decimal values.
                     new_tokens.push(TokenSeparator::Value(format!("{:06X}", *tagvalue)));
                     if separator_buffer.len() > 0 {
-                        while let Some(token) = separator_buffer.pop(){
-                            println!("Pushing value onto the new array");
+                        while let Some(token) = separator_buffer.pop() {
                             new_tokens.push(token);
                         }
                     }
@@ -338,8 +338,19 @@ fn validate_tag_offsets(
         curr_token = tokens.pop();
     }
 
+    // If there's something left on the value buffer, pop off what's in new_tokens onto it,
+    //  and then refill new_tokens into it by popping all the values off that buffer.
+    if separator_buffer.len() > 0 {
+        while let Some(token) = new_tokens.pop() {
+            separator_buffer.insert(0, token);
+        }
+        while let Some(token) = separator_buffer.pop() {
+            new_tokens.push(token);
+        }
+    }
 
     println!("Outcome after validate_tag_offsets was {:?}", &new_tokens);
+    println!("Remaining in buffer was {:?}", separator_buffer);
 
     Ok(new_tokens)
 }
