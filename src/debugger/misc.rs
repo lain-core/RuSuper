@@ -1,9 +1,7 @@
-use super::{parser::HexOperators, TokenSeparator, VirtualMachine};
-use crate::debugger::parser;
+use super::{TokenSeparator, VirtualMachine};
 use std::process::exit;
 
 /**************************************** Constant Values ***************************************************************/
-const NUM_ADDR_BYTES: usize = 3;
 
 /**************************************** File Scope Functions **********************************************************/
 /// Exits the program.
@@ -37,17 +35,17 @@ pub fn dbg_continue(
     vm.is_running = true;
 }
 
-pub fn dbg_print(
-    args: Vec<TokenSeparator>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
-) {
-}
+// pub fn dbg_print(
+//     args: Vec<TokenSeparator>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
+// ) {
+// }
 
 /// Print the value at an absolute memory address.
 /// Parameters:
 ///     - `address`:    Address to read from.
 ///     - `_debug`:     Debugger State, unused.
 ///     - `vm`:         Virtual Machine containing memory to read from.
-fn dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
+fn _dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
     let byte_value = vm.memory.get_byte(address);
     let word_value = vm.memory.get_word(address);
 
@@ -73,10 +71,6 @@ fn dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mu
     }
 
     print!("\n");
-}
-
-fn dbg_print_offset() {
-    println!("Unimplemented");
 }
 
 /**************************************** Tests *************************************************************************/

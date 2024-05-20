@@ -8,7 +8,7 @@ use std::{
     io::{self, Write},
 };
 
-use self::parser::{str_to_args, InvalidDbgArgError};
+use self::parser::str_to_args;
 /**************************************** Struct and Type definitions ***************************************************/
 
 /// Struct to track the operation of the debugger.
@@ -21,7 +21,7 @@ struct DebuggerState {
     pub is_stepping: bool,
     pub steps_to_run: usize,
     breakpoints: Vec<usize>,
-    watched_vars: Vec<usize>,
+    _watched_vars: Vec<usize>,
     tags: HashMap<String, usize>,
 }
 
@@ -30,7 +30,7 @@ impl DebuggerState {
         Self {
             is_stepping: false,
             steps_to_run: 0,
-            watched_vars: Vec::new(),
+            _watched_vars: Vec::new(),
             breakpoints: Vec::new(),
             tags: HashMap::new(),
         }
@@ -44,7 +44,6 @@ enum DebugCommandTypes {
     Break,
     Continue,
     Step,
-    Tag,
     Dump,
     Print,
     Watch,
@@ -55,17 +54,31 @@ enum DebugCommandTypes {
 impl From<&str> for DebugCommandTypes {
     fn from(value: &str) -> Self {
         match value {
-            "b" => Self::Break,
-            "break" => Self::Break,
             "h" => Self::Help,
             "help" => Self::Help,
+
             "c" => Self::Continue,
             "r" => Self::Continue,
+
             "q" => Self::Exit,
             "quit" => Self::Exit,
             "exit" => Self::Exit,
+
+            "b" => Self::Break,
+            "break" => Self::Break,
+
             "p" => Self::Print,
             "print" => Self::Print,
+
+            "d" => Self::Dump,
+            "dump" => Self::Dump,
+
+            "s" => Self::Step,
+            "step" => Self::Step,
+
+            "w" => Self::Watch,
+            "watch" => Self::Watch,
+
             _ => Self::Invalid,
         }
     }
@@ -115,10 +128,6 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
         (
             DebugCommandTypes::Break,
             Box::new(breakpoints::dbg_breakpoint) as DebugFn,
-        ),
-        (
-            DebugCommandTypes::Print,
-            Box::new(misc::dbg_print) as DebugFn,
         ),
     ])
 }

@@ -1322,9 +1322,9 @@ pub enum CpuOpcode {
 #[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 enum CpuParamWidth {
-    NO    = PC_INCREMENT_NO_ARG,
-    SHORT = PC_INCREMENT_SHORT_ARG,
-    LONG  = PC_INCREMENT_LONG_ARG,
+    NO     = PC_INCREMENT_NO_ARG,
+    _SHORT = PC_INCREMENT_SHORT_ARG,
+    _LONG  = PC_INCREMENT_LONG_ARG,
 }
 
 /// Generalized function signature for CPU Instruction functions.
@@ -1345,12 +1345,12 @@ struct CpuInstruction {
 /// Virtualized representation of the CPU internally.
 #[derive(Debug)]
 pub struct CpuState {
-    acc: u16,               // Accumulator
+    _acc: u16,              // Accumulator
     pc: u16,                // Program Counter
-    sp: u16,                // Stack Pointer
-    flags: u8,              // Flags
-    direct_page: u16,       // Direct page addressing offset (Lower 4 bytes of address)
-    data_bank: u8,          // Reference to current data bank addr (Upper 2 bytes of address)
+    _sp: u16,               // Stack Pointer
+    _flags: u8,             // Flags
+    _direct_page: u16,      // Direct page addressing offset (Lower 4 bytes of address)
+    _data_bank: u8,         // Reference to current data bank addr (Upper 2 bytes of address)
     prog_bank: u8,          // Reference to current bank of instr (Upper 2 bytes of address)
     pub cycles_to_pend: u8, // Number of cycles to pend before running next operation.
 }
@@ -1359,12 +1359,12 @@ impl CpuState {
     /// Return a new blank CpuState instance.
     pub const fn new() -> Self {
         Self {
-            acc: 0x0000,
+            _acc: 0x0000,
             pc: 0x8000,
-            sp: 0x0000,
-            flags: 0x00,
-            direct_page: 0x0000,
-            data_bank: 0x00,
+            _sp: 0x0000,
+            _flags: 0x00,
+            _direct_page: 0x0000,
+            _data_bank: 0x00,
             prog_bank: 0x80,
             cycles_to_pend: 0x00,
         }
@@ -1411,10 +1411,10 @@ impl CpuState {
 
         match inst.width {
             CpuParamWidth::NO => parameter_value = 0,
-            CpuParamWidth::SHORT => {
+            CpuParamWidth::_SHORT => {
                 parameter_value = p_mem.get_byte(parameter_location).unwrap() as u16
             }
-            CpuParamWidth::LONG => parameter_value = p_mem.get_word(parameter_location).unwrap(),
+            CpuParamWidth::_LONG => parameter_value = p_mem.get_word(parameter_location).unwrap(),
         }
 
         // Call the function to execute.
@@ -1426,10 +1426,10 @@ impl CpuState {
     }
 
     /// Print the current state of the CPU.
-    pub fn print_state(&self) {
+    pub fn _print_state(&self) {
         print!(
             "\nPC: {:#08X} ACC: {:#06X} SP: {:#06X}\nData Bank: {:#04X} Prog Bank: {:#04X} Direct Page: {:#06X}\nFlags nvmxdizc: {:#04X}\n    {:#010b}\n"
-             ,self.pc, self.acc, self.sp, self.data_bank, self.prog_bank, self.direct_page, self.flags, self.flags
+             ,self.pc, self._acc, self._sp, self._data_bank, self.prog_bank, self._direct_page, self._flags, self._flags
         );
     }
 

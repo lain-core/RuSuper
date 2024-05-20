@@ -1,5 +1,3 @@
-use std::io;
-use std::io::Write;
 use std::time;
 
 use crate::cpu;
@@ -9,7 +7,7 @@ use crate::romdata;
 
 /**************************************** Constant Values ***************************************************************/
 /// The SNES master clock runs at about 21.477MHz NTSC (theoretically 1.89e9/88 Hz).
-const MASTER_CLOCK_CYCLE_TICK_SEC: f64 = 1.0 / (21.477 * 1000.0 * 1000.0);
+const _MASTER_CLOCK_CYCLE_TICK_SEC: f64 = 1.0 / (21.477 * 1000.0 * 1000.0);
 
 /// SlowROMs run the SNES CPU at 2.68MHz.
 const SLOWROM_CLOCK_CYCLE_TICK_SEC: f64 = 1.0 / (2.68 * 1000.0 * 1000.0);
@@ -22,18 +20,18 @@ const FASTROM_CLOCK_CYCLE_TICK_SEC: f64 = 1.0 / (3.58 * 1000.0 * 1000.0);
 /// Struct to manage count of clocks.
 struct ClockState {
     clock_speed: f64,
-    master_clock_cycles_elapsed: usize,
+    _master_clock_cycles_elapsed: usize,
     cpu_clock_cycles_elapsed: usize,
-    ppu_clock_cycles_elapsed: usize,
+    _ppu_clock_cycles_elapsed: usize,
 }
 
 impl ClockState {
     pub fn new() -> Self {
         Self {
             clock_speed: 0.0,
-            master_clock_cycles_elapsed: 0,
+            _master_clock_cycles_elapsed: 0,
             cpu_clock_cycles_elapsed: 0,
-            ppu_clock_cycles_elapsed: 0,
+            _ppu_clock_cycles_elapsed: 0,
         }
     }
 }
