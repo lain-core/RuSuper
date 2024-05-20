@@ -932,7 +932,7 @@ mod tests {
                 vec!["50", "+", "$0A"],
                 vec!["50", "+", "50"],
             ];
-            let token_vectors = token_tag_as_value();
+            let token_vectors = token_literal_test_cases();
 
             for (test_input, expected_result) in zip(string_vectors, token_vectors) {
                 assert_eq!(

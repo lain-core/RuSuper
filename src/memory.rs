@@ -21,9 +21,7 @@ pub struct InvalidAddressError {
 }
 
 impl InvalidAddressError {
-    pub fn new(addr: usize) -> Self {
-        Self { addr: addr }
-    }
+    pub fn new(addr: usize) -> Self { Self { addr: addr } }
 }
 
 impl fmt::Display for InvalidAddressError {
@@ -89,10 +87,7 @@ impl Memory {
     ///     - `Ok(())`:                     If written OK.
     ///     - `InvalidAddressError(e)`:     If an invalid address was passed.
     pub fn put_bank(
-        &mut self,
-        banktype: romdata::BankSize,
-        address: usize,
-        bankdata: &[u8],
+        &mut self, banktype: romdata::BankSize, address: usize, bankdata: &[u8],
     ) -> Result<(), InvalidAddressError> {
         match address_is_valid(address + banktype as usize - 1) {
             Ok(_t) => {

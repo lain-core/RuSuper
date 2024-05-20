@@ -1322,9 +1322,9 @@ pub enum CpuOpcode {
 #[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 enum CpuParamWidth {
-    NO = PC_INCREMENT_NO_ARG,
+    NO    = PC_INCREMENT_NO_ARG,
     SHORT = PC_INCREMENT_SHORT_ARG,
-    LONG = PC_INCREMENT_LONG_ARG,
+    LONG  = PC_INCREMENT_LONG_ARG,
 }
 
 /// Generalized function signature for CPU Instruction functions.
@@ -1434,9 +1434,7 @@ impl CpuState {
     }
 
     /// Compose a fully-formed absolute address from the current PC and return it.
-    pub fn get_pc(&self) -> usize {
-        memory::compose_address(self.prog_bank, self.pc)
-    }
+    pub fn get_pc(&self) -> usize { memory::compose_address(self.prog_bank, self.pc) }
 }
 /**************************************** File Scope Functions **********************************************************/
 

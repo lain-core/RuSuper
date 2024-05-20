@@ -129,8 +129,7 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
 ///     - `vm`:         Pointer to the virtual machine to fetch values from memory or PC.
 ///     - `debug_cmds`: The assembled table of debugger command->fn pointers.
 fn check_dbg_input(
-    debug: &mut DebuggerState,
-    vm: &mut VirtualMachine,
+    debug: &mut DebuggerState, vm: &mut VirtualMachine,
     debug_cmds: &HashMap<DebugCommandTypes, DebugFn>,
 ) {
     let mut input_text = String::new();
