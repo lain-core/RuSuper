@@ -217,10 +217,11 @@ pub fn compute_address_from_args(
     let mut address: Option<usize> = None;
     let mut modifiers: Vec<TokenSeparator> = vec![];
 
-    for next in args.iter() {
-        match next {
-            TokenSeparator::HexValue => modifiers.push(TokenSeparator::HexValue),
-            TokenSeparator::Offset => modifiers.push(TokenSeparator::Offset),
+    // If the token is a value, apply all respective modifiers to it.
+    // If the token is a tag, TBD;
+    // Otherwise, just push it as it is onto the stack.
+    for token in args.iter() {
+        match token {
             TokenSeparator::Value(data) => {
                 println!("Found Value: {}", data);
                 match apply_modifiers(&mut modifiers, vm, address, data.to_string()) {
@@ -232,8 +233,7 @@ pub fn compute_address_from_args(
             TokenSeparator::Tag(name) => {
                 println!("Found Tag: {}", name);
             }
-            TokenSeparator::Invalid => (),
-            TokenSeparator::Divider => (),
+            _ => modifiers.push(token.clone()),
         }
     }
 
@@ -256,43 +256,33 @@ fn collect_args(argvec: Vec<&str>) -> Result<Vec<TokenSeparator>, InvalidDbgArgE
     let mut delimiters: Vec<TokenSeparator> = vec![];
     let mut value_buffer: String = String::new();
 
-    println!("Input was {:?}", &argvec);
-
     let args = argvec.join(" ");
     if args.len() > 0 {
-        for index in 0..args.len() {
-            let current_char = args.chars().nth(index).unwrap();
-            match TokenSeparator::from(current_char.to_string().as_str()) {
+        for current_char in args.chars() {
+            let current_token = TokenSeparator::from(current_char.to_string().as_str());
+            match current_token {
                 // If a separator is found, clear the buffer of other characters and then push on the sepatator.
-                TokenSeparator::HexValue => {
+                TokenSeparator::HexValue | TokenSeparator::Offset => {
                     if value_buffer.len() > 0 {
                         delimiters.push(TokenSeparator::Value(value_buffer));
                         value_buffer = String::new();
                     }
-                    delimiters.push(TokenSeparator::HexValue);
+                    delimiters.push(current_token);
                 }
 
-                TokenSeparator::Offset => {
-                    if value_buffer.len() > 0 {
-                        delimiters.push(TokenSeparator::Value(value_buffer));
-                        value_buffer = String::new();
-                    }
-                    delimiters.push(TokenSeparator::Offset)
-                }
-
-                // If it is not a delimiting character, push it onto the value buffer.
-                TokenSeparator::Invalid => {
-                    value_buffer.push(current_char);
-                }
-                // If we found a divider, flush the value buffer if it has something in it.
+                // If we found a divider, just clear the buffer.
                 TokenSeparator::Divider => {
                     if value_buffer.len() > 0 {
                         delimiters.push(TokenSeparator::Value(value_buffer));
                         value_buffer = String::new();
                     }
                 }
-                TokenSeparator::Value(_) => (), // This is not a possible option in the TokenSeparator::from constructor
-                TokenSeparator::Tag(_) => (), // This is not a possible option in the TokenSeparator::from Constructor
+
+                // If it is not a delimiting character, push it onto the value buffer for now.
+                TokenSeparator::Invalid => {
+                    value_buffer.push(current_char);
+                }
+                _ => (),
             }
         }
     }
@@ -321,8 +311,8 @@ fn collect_tags(tokens: Vec<TokenSeparator>) -> Vec<TokenSeparator> {
                 if data.is_decimal() || data.is_hex() {
                     new_vec.push(TokenSeparator::Value(data));
                 }
+                // Otherwise put it on as a tag.
                 else {
-                    // For now, just push it straight on, but in the future we should probably do some more checks(?)
                     new_vec.push(TokenSeparator::Tag(data));
                 }
             }
@@ -348,44 +338,48 @@ fn validate_tag_offsets(
     let mut tag_as_value_stack: Vec<TokenSeparator> = vec![];
 
     // Push each of the values off of token onto the new tag_as_value_stack.
-    // When a Tag is encountered, try and dereference the tag.
-    //      If the tag deref'd, push it on as a value.
-    //      If not, check if the last value was an offset.
-    //          If so, raise an error, because you cannot perform math on an undefined value.
-    //          If not, this tag may be the user asking to define something new. Just put it on as a Tag value.
-    // When an Offset is encountered, check if the last token was a tag.
-    //      If so, try to dereference that tag, and push that value onto the stack.
-    //          If the value cannot be dereferenced, raise an error, because you cannot perform math on an undefined value.
-    //      If not, push the offset onto the stack as normal.
     while let Some(curr_token) = tokens.pop() {
         match curr_token {
+            // When a tag is found, try to dereference it.
             TokenSeparator::Tag(ref tagname) => {
+                // If it was able to be dereferenced, push it on as it's computed value.
                 if let Some(value) = debug.tags.get(tagname) {
                     tag_as_value_stack
                         .push(TokenSeparator::Value((*value.to_hex_string()).to_string()));
                 }
+                // If not, check if the last token was an Offset.
                 else {
+                    // If it was, then print an error, because the user is trying to perform arithmetic with an undefined value.
                     if let Some(TokenSeparator::Offset) = last_token {
                         return Err(InvalidDbgArgError::from(format!("Attempting to perform arithmetic with a tag which is not yet defined: {}", tagname)));
                     }
+                    // Otherwise, push it back on as-is, because it is a new tag.
                     else {
                         tag_as_value_stack.push(curr_token.clone());
                     }
                 }
             }
+
+            // When an offset is found, check if the last item was a tag.
             TokenSeparator::Offset => {
+                // If it was, then try to deref it.
                 if let Some(TokenSeparator::Tag(tagname)) = last_token {
+                    // If it can be dereferenced, then it will have already been put on the stack by the Tag case, so just push the Offset on.
                     if let Some(_value) = debug.tags.get(&tagname) {
                         tag_as_value_stack.push(TokenSeparator::Offset);
                     }
+                    // If it can't be dereferenced, then print an error, because the user is trying to perform arithmetic with an undefined value.
                     else {
                         return Err(InvalidDbgArgError::from(format!("Attempting to perform arithmetic with a tag which is not yet defined: {}", tagname)));
                     }
                 }
+                // If it wasn't a tag, just push this on and proceed as normal.
                 else {
                     tag_as_value_stack.push(TokenSeparator::Offset);
                 }
             }
+
+            // Any other operator doesn't have much bearing on our tag, so just leave them as they are.
             _ => {
                 tag_as_value_stack.push(curr_token.clone());
             }
@@ -427,25 +421,26 @@ fn apply_modifiers(
         if modifiers.len() > 0 {
             // Move right to left an apply the modifiers to the value.
             while let Some(ref modi) = modifiers.pop() {
-                // If the value is a hex value, convert it and replace the decimal expression of it.
-                if *modi == TokenSeparator::HexValue {
-                    println!("Applying Hex Modifier to value");
-                    scratch_value = value.to_hex()?;
-                }
-                // If the value is an offset:
-                //      - Check if a base address has been set prior to this, and modify it if so.
-                //      - Otherwise just apply the offset to the current PC value and store it.
-                else if *modi == TokenSeparator::Offset {
-                    println!("Applying Offset Modifier to value");
-                    match base_addr {
-                        // If the address is none, the offset is relative to PC.
-                        None => {
-                            scratch_value = vm.cpu.get_pc() + scratch_value;
-                        }
-                        Some(addr_value) => {
-                            scratch_value = addr_value + scratch_value;
+                match *modi {
+                    // If the value is a hex value, convert it to hex.
+                    TokenSeparator::HexValue => {
+                        scratch_value = value.to_hex()?;
+                    }
+
+                    // If there is an offset, do the math.
+                    TokenSeparator::Offset => {
+                        match base_addr {
+                            // If there is some base address to operate on, add the scratch value to it.
+                            Some(addr_value) => {
+                                scratch_value = addr_value + scratch_value;
+                            }
+                            // If the address is none, the offset is relative to PC.
+                            None => {
+                                scratch_value = vm.cpu.get_pc() + scratch_value;
+                            }
                         }
                     }
+                    _ => (),
                 }
             }
         }
