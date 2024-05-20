@@ -273,14 +273,15 @@ fn collect_tags(tokens: Vec<TokenSeparator>) -> Vec<TokenSeparator> {
 fn validate_tag_offsets(
     mut tokens: Vec<TokenSeparator>, debug: &DebuggerState,
 ) -> Result<Vec<TokenSeparator>, InvalidDbgArgError> {
-    let mut last_token: Option<TokenSeparator> = None;
-    let mut curr_token: Option<TokenSeparator> = tokens.pop();
-    let mut new_tokens: Vec<TokenSeparator> = vec![];
-
     println!(
         "Values passed in to validate_tag_offsets was: {:?}",
         &tokens
     );
+    let mut last_token: Option<TokenSeparator> = None;
+    let mut curr_token: Option<TokenSeparator> = tokens.pop();
+    let mut new_tokens: Vec<TokenSeparator> = vec![];
+
+
 
     while curr_token != None {
         match curr_token {
@@ -307,7 +308,7 @@ fn validate_tag_offsets(
                 // If the last value was an offset, then this tag MUST be derefable, or we can throw an error.
                 // If the last value was NOT an offset, then this could be a new tag.
                 if let Some(tagvalue) = debug.tags.get(tagname) {
-                    new_tokens.push(TokenSeparator::Value(format!("{:08X}", *tagvalue)));
+                    new_tokens.push(TokenSeparator::Value(format!("{:06X}", *tagvalue)));
                 }
                 else {
                     if let Some(TokenSeparator::Offset) = last_token {
