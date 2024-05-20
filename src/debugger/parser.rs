@@ -283,7 +283,7 @@ fn validate_tag_offsets(
     let mut separator_buffer: Vec<TokenSeparator> = vec![];
 
 
-
+    // TODO: I feel there is a way to make this a lot less messy.
     while curr_token != None {
         match curr_token {
             // If the current token is an offset, check if it is following a Tag.
@@ -298,7 +298,7 @@ fn validate_tag_offsets(
                         )));
                     }
                     else {
-                        new_tokens.push(TokenSeparator::Offset);
+                        separator_buffer.push(TokenSeparator::Offset);
                     }
                 }
                 // If the offset applies to a value which is NOT a tag, we will put it on the buffer of separators
@@ -311,11 +311,16 @@ fn validate_tag_offsets(
                 // If the last value was NOT an offset, then this could be a new tag.
                 if let Some(tagvalue) = debug.tags.get(tagname) {
                     // TODO: Tags must be able to be STORED as hex or decimal values.
-                    new_tokens.push(TokenSeparator::Value(format!("{:06X}", *tagvalue)));
+                    println!("Found a Tag {}. The current list of tokens is {:?} The current buffer is {:?}", tagname, new_tokens, separator_buffer);
+
                     if separator_buffer.len() > 0 {
+                        new_tokens.push(TokenSeparator::Value(format!("{:06X}", *tagvalue)));
                         while let Some(token) = separator_buffer.pop() {
                             new_tokens.push(token);
                         }
+                    }
+                    else {
+                        separator_buffer.push(TokenSeparator::Value(format!("{:06X}", *tagvalue)));
                     }
                 }
                 else {
@@ -923,10 +928,11 @@ mod tests {
                 ],
                 // tag + tag2
                 // 2 tag values (both should exist prior)
+                // Hex tag values will always be widened to a 6-digit hex value.
                 vec![
                     TokenSeparator::Value(String::from("808000")),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from("0A")),
+                    TokenSeparator::Value(String::from("00000A")),
                 ],
             ]
         }
