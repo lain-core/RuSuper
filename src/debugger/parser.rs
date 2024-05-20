@@ -280,6 +280,7 @@ fn validate_tag_offsets(
     let mut last_token: Option<TokenSeparator> = None;
     let mut curr_token: Option<TokenSeparator> = tokens.pop();
     let mut new_tokens: Vec<TokenSeparator> = vec![];
+    let mut separator_buffer: Vec<TokenSeparator> = vec![];
 
 
 
@@ -298,6 +299,7 @@ fn validate_tag_offsets(
                     }
                     else {
                         new_tokens.push(TokenSeparator::Offset);
+
                     }
                 }
                 else {
@@ -309,6 +311,12 @@ fn validate_tag_offsets(
                 // If the last value was NOT an offset, then this could be a new tag.
                 if let Some(tagvalue) = debug.tags.get(tagname) {
                     new_tokens.push(TokenSeparator::Value(format!("{:06X}", *tagvalue)));
+                    if separator_buffer.len() > 0 {
+                        while let Some(token) = separator_buffer.pop(){
+                            println!("Pushing value onto the new array");
+                            new_tokens.push(token);
+                        }
+                    }
                 }
                 else {
                     if let Some(TokenSeparator::Offset) = last_token {
@@ -323,7 +331,7 @@ fn validate_tag_offsets(
                     }
                 }
             }
-            Some(ref token) => new_tokens.push(token.clone()),
+            Some(ref token) => separator_buffer.push(token.clone()),
             None => (),
         }
         last_token = curr_token.clone();
