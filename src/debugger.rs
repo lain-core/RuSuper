@@ -9,7 +9,7 @@ use std::{
     io::{self, Write},
 };
 
-use self::parser::{str_to_args, DebugTokenStream};
+use self::parser::{str_to_args, DebugTokenStream, InvalidDbgArgError};
 /**************************************** Struct and Type definitions ***************************************************/
 
 pub type DebugTagTable = HashMap<String, usize>;
@@ -153,13 +153,20 @@ fn check_dbg_input(
     if trimmed.len() > 0 {
         let command: DebugCommandTypes =
             DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
-        let mut arguments: DebugTokenStream = vec![];
+        let mut arguments: Result<DebugTokenStream, InvalidDbgArgError> = Ok(vec![]);
         if trimmed.len() > 1 {
-            arguments = str_to_args(trimmed[1..].to_vec(), &debug).unwrap();
+            arguments = str_to_args(trimmed[1..].to_vec(), &debug);
         }
 
         // Call the debugger function.
-        debug_cmds[&command](arguments, debug, vm);
+        match arguments {
+            Ok(arguments) => { 
+                debug_cmds[&command](arguments, debug, vm);
+            }
+            Err(e) => {
+                println!("{}", e);
+            }
+        }
     }
 }
 

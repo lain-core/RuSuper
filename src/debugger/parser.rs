@@ -23,7 +23,7 @@ pub struct InvalidDbgArgError {
 }
 
 impl fmt::Display for InvalidDbgArgError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.value) }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "ERROR: {}", self.value) }
 }
 
 impl From<&str> for InvalidDbgArgError {
@@ -209,16 +209,18 @@ pub fn str_to_args(
     // First Pass: Convert the list of strings into a list of tokens as-is.
     if let Ok(delimiters) = collect_args(argvec) {
         // Second Pass: Convert all of the TokenSeparator::Value()s which correspond to tags into tags
-        let tokens_with_tags: Vec<TokenSeparator> = collect_tags(delimiters);
+        arg_result = Ok(collect_tags(delimiters));
 
         // Third pass: if any tags exist in the list of tokens, then check if they already exist and convert them back into values where possible.
         //      Any remaining tags will have to be new tags.
-        if tokens_with_tags.contains_tag() {
-            match validate_tag_offsets(tokens_with_tags, debug) {
-                Ok(new_list) => {
-                    arg_result = Ok(new_list);
+        if let Ok(ref tokens) = arg_result {
+            if tokens.contains_tag() {
+                match validate_tag_offsets(tokens.to_vec(), debug) {
+                    Ok(new_list) => {
+                        arg_result = Ok(new_list);
+                    }
+                    Err(e) => arg_result = Err(e),
                 }
-                Err(e) => arg_result = Err(e),
             }
         }
     }
@@ -237,22 +239,29 @@ pub fn compute_address_from_args(
 ) -> Result<usize, InvalidDbgArgError> {
     let mut address: Option<usize> = None;
     let mut modifiers: Vec<TokenSeparator> = vec![];
+    let mut last_value: Option<String> = None;
+    let mut operator_found: bool = true;
 
-    // If the token is a value, apply all respective modifiers to it.
-    // If the token is a tag, TBD;
+    // If the token is a value, apply the modifiers, then
+    //      Check if there was an operator found between this and the last value. If not, raise an error.
+    // If the token is a modifier, then mark that one was found and push it on.
     // Otherwise, just push it as it is onto the stack.
     for token in args.iter() {
         match token {
             TokenSeparator::Value(data) => {
-                println!("Found Value: {}", data);
                 match apply_modifiers(&mut modifiers, vm, address, data.to_string()) {
                     Ok(newaddr) => address = Some(newaddr),
                     Err(e) => return Err(e),
                 }
-                // When we find a numeric value, go through the list of modifiers and apply them where necessary.
+                if !operator_found {
+                    return Err(InvalidDbgArgError::from(format!("No operator found between {} and {}.", last_value.expect(""), data)));
+                }
+                operator_found = false;
+                last_value = Some(data.clone());
             }
-            TokenSeparator::Tag(name) => {
-                println!("Found Tag: {}", name);
+            TokenSeparator::Offset => {
+                operator_found = true;
+                modifiers.push(token.clone());
             }
             _ => modifiers.push(token.clone()),
         }
@@ -261,7 +270,7 @@ pub fn compute_address_from_args(
     match address {
         Some(val) => Ok(val),
         None => Err(InvalidDbgArgError::from(
-            "Could not discern a value from arguments passed",
+            "Could not discern a value from arguments passed.",
         )),
     }
 }
@@ -380,6 +389,8 @@ fn validate_tag_offsets(
                 if let Some(value) = debug.tags.get(tagname) {
                     tag_as_value_stack
                         .push(TokenSeparator::Value((*value.to_hex_string()).to_string()));
+                    // All values stored in the hash map will be parsed coming out as hex.
+                    tag_as_value_stack.push(TokenSeparator::HexValue);
                 }
                 // If not, check if the last token was an Offset.
                 else {
@@ -387,9 +398,9 @@ fn validate_tag_offsets(
                     if let Some(TokenSeparator::Offset) = last_token {
                         return Err(InvalidDbgArgError::from(format!("Attempting to perform arithmetic with a tag which is not yet defined: {}", tagname)));
                     }
-                    // Otherwise, push it back on as-is, because it is a new tag.
+                    // Otherwise, insert it to the front of the stack, so that it can be read as a result of the modifications right
                     else {
-                        tag_as_value_stack.push(curr_token.clone());
+                        tag_as_value_stack.insert(0, curr_token.clone());
                     }
                 }
             }
@@ -481,13 +492,31 @@ fn apply_modifiers(
     Ok(scratch_value)
 }
 
-/// Take a stream with exactly one token in it, apply modifiers to the numeric values, and then create the tag.
+/// Take a stream with exactly one tag at the end, apply modifiers to the numeric values, and then create the tag.
 /// # Parameters:
 ///     - `tokens`:     Stream of tokens to parse, where tags have been deref'd where possible.
 ///     - `table`:      Table to insert the tag into.
 /// # Returns:
 ///     - `usize`:      Finalized address of the tag, for immediate use.
-pub fn create_new_tag(tokens: DebugTokenStream, table: &mut DebugTagTable) -> usize { return 0; }
+pub fn create_new_tag(mut tokens: DebugTokenStream, vm: &VirtualMachine, table: &mut DebugTagTable) -> Result<usize, InvalidDbgArgError> {
+    let result: Result<usize, InvalidDbgArgError>;
+    if let Some(TokenSeparator::Tag(ref tagname)) = tokens.pop() {
+        match compute_address_from_args(tokens, vm) {
+            Ok(value) => {
+                table.insert(tagname.to_string(), value);
+                println!("Tag {} created at {:#08X}", tagname, value);
+                result = Ok(value);
+            }
+            Err(e) => {
+                result = Err(InvalidDbgArgError::from(format!("{} Cannot create tag {}.", e, tagname)));
+            }
+        }
+    }
+    else{
+        result = Err(InvalidDbgArgError::from("Request to create a new tag was formatted incorrectly."));
+    }
+    return result;
+}
 
 /// Convert a String value into a constructed hex value.
 /// E.G., "$808000" becomes 0x808000.
@@ -558,6 +587,7 @@ mod tests {
         pub const TEST_TAG_NAME3: &str = "tagname3";
         pub const TEST_BASE_ADDR: &str = "808000";
         pub const TEST_DECIMAL_VALUE: &str = "50";
+        pub const _TEST_DECIMAL_VALUE_AS_HEX: &str = "32";
         pub const TEST_HEX_VALUE: &str = "0A";
         pub const TEST_WIDE_HEX_VALUE: &str = "00000A";
 
@@ -921,6 +951,7 @@ mod tests {
                 // tag $808000
                 // Tag followed by Hex Literal
                 vec![
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
@@ -928,12 +959,14 @@ mod tests {
                 // tag 50
                 // Tag followed by decimal literal
                 vec![
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
                 ],
                 // tag $808000 + $0A
                 // Tag, as specified by a hex literal + hex offset
                 vec![
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
@@ -944,6 +977,7 @@ mod tests {
                 // tag $808000 + 50
                 // Tag, as specified by a hex literal + decimal offset
                 vec![
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
@@ -953,6 +987,7 @@ mod tests {
                 // tag + $0A
                 // Tag with Hex Offset (Tag should exist prior)
                 vec![
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
@@ -961,6 +996,7 @@ mod tests {
                 // tag + 50
                 // Tag with Decimal Offset (Tag should exist prior)
                 vec![
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::Offset,
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
@@ -971,12 +1007,14 @@ mod tests {
                 vec![
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                 ],
                 // 50 tag
                 // Decimal literal followed by tag
                 vec![
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                 ],
                 // $808000 + $0A tag
@@ -987,6 +1025,7 @@ mod tests {
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                 ],
                 // $808000 + 50 tag
@@ -996,6 +1035,7 @@ mod tests {
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::Offset,
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                 ],
                 // $0A + tag
@@ -1004,6 +1044,7 @@ mod tests {
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
                     TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                 ],
                 // 50 + tag
@@ -1011,6 +1052,7 @@ mod tests {
                 vec![
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
                     TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                 ],
                 // +$0A tag
@@ -1019,6 +1061,7 @@ mod tests {
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                 ],
                 // +50 tag
@@ -1026,42 +1069,54 @@ mod tests {
                 vec![
                     TokenSeparator::Offset,
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                 ],
                 /******* Other Tag Cases *******/
                 // tag
                 // Just a tag name
-                vec![TokenSeparator::Value(String::from(TEST_BASE_ADDR))],
+                vec![
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR))
+                ],
                 // tag + tag
                 // Adding a tag value to itself (should exist prior)
                 vec![
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                 ],
                 // tag + tag2
                 // 2 tag values (both should exist prior)
                 // Hex tag values will always be widened to a 6-digit hex value.
                 vec![
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_WIDE_HEX_VALUE)),
                 ],
                 // tag + tag2 tag3
                 // 2 tag values (both should exist prior) equate to one new tag.
                 vec![
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_WIDE_HEX_VALUE)),
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME3)),
                 ],
                 // tag3 tag + tag2
                 // 2 tag values (both should exist prior) equate to one new tag.
                 vec![
-                    TokenSeparator::Tag(String::from(TEST_TAG_NAME3)),
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
                     TokenSeparator::Offset,
+                    TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_WIDE_HEX_VALUE)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME3)),
                 ],
             ]
         }
