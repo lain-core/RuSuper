@@ -1,15 +1,18 @@
 mod breakpoints;
 mod misc;
-mod utils;
+mod parser;
 
 use crate::emu::{self, VirtualMachine};
 use std::{
     collections::HashMap,
-    io::{self, Write}
+    fmt::Debug,
+    io::{self, Write},
 };
 
-use self::utils::{collect_args, InvalidValueError};
+use self::parser::{str_to_args, DebugTokenStream, InvalidDbgArgError};
 /**************************************** Struct and Type definitions ***************************************************/
+
+pub type DebugTagTable = HashMap<String, usize>;
 
 /// Struct to track the operation of the debugger.
 /// is_stepping: if the debugger is running,
@@ -21,8 +24,8 @@ struct DebuggerState {
     pub is_stepping: bool,
     pub steps_to_run: usize,
     breakpoints: Vec<usize>,
-    watched_vars: Vec<usize>,
-    tags: DebuggerTags,
+    _watched_vars: Vec<usize>,
+    tags: DebugTagTable,
 }
 
 impl DebuggerState {
@@ -30,30 +33,9 @@ impl DebuggerState {
         Self {
             is_stepping: false,
             steps_to_run: 0,
-            watched_vars: Vec::new(),
+            _watched_vars: Vec::new(),
             breakpoints: Vec::new(),
-            tags: DebuggerTags::new(),
-        }
-    }
-}
-
-struct DebuggerTags {
-    tags: HashMap<String, usize>,
-}
-impl DebuggerTags {
-    fn new() -> Self {
-        Self {
             tags: HashMap::new(),
-        }
-    }
-
-    fn get(&self, key: &str) -> Result<usize, InvalidValueError> {
-        match self.tags.get(key) {
-            Some(value) => Ok(*value),
-            None => Err(InvalidValueError::from(format!(
-                "Tag {} does not exist!",
-                key
-            ))),
         }
     }
 }
@@ -65,7 +47,6 @@ enum DebugCommandTypes {
     Break,
     Continue,
     Step,
-    Tag,
     Dump,
     Print,
     Watch,
@@ -76,43 +57,59 @@ enum DebugCommandTypes {
 impl From<&str> for DebugCommandTypes {
     fn from(value: &str) -> Self {
         match value {
-            "b" => Self::Break,
-            "break" => Self::Break,
             "h" => Self::Help,
             "help" => Self::Help,
+
             "c" => Self::Continue,
             "r" => Self::Continue,
+
             "q" => Self::Exit,
             "quit" => Self::Exit,
             "exit" => Self::Exit,
+
+            "b" => Self::Break,
+            "break" => Self::Break,
+
             "p" => Self::Print,
             "print" => Self::Print,
+
+            "d" => Self::Dump,
+            "dump" => Self::Dump,
+
+            "s" => Self::Step,
+            "step" => Self::Step,
+
+            "w" => Self::Watch,
+            "watch" => Self::Watch,
+
             _ => Self::Invalid,
         }
     }
 }
 
 /// Parseable tokens in debugger inputs.
-#[derive(Debug, PartialEq, Eq)]
-enum TokenSeparators {
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum TokenSeparator {
     HexValue,
     Offset,
-    Value(String),      // Represents all numeric values (decimal and hex).
-    Tag(String),        // Represents all non-value values (tag strings).
+    Divider,       // Represents general divider character.
+    Value(String), // Represents all numeric values (decimal and hex).
+    Tag(String),   // Represents all non-value values (tag strings).
     Invalid,
 }
 
-impl From<&str> for TokenSeparators {
+impl From<&str> for TokenSeparator {
     fn from(value: &str) -> Self {
         match value {
             "$" => Self::HexValue,
             "+" => Self::Offset,
+            " " => Self::Divider,
             _ => Self::Invalid,
         }
     }
 }
 
-type DebugFn = Box<dyn Fn(Vec<TokenSeparators>, &mut DebuggerState, &mut VirtualMachine)>;
+type DebugFn = Box<dyn Fn(DebugTokenStream, &mut DebuggerState, &mut VirtualMachine)>;
 
 /**************************************** File Scope Functions **********************************************************/
 
@@ -135,10 +132,6 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
             DebugCommandTypes::Break,
             Box::new(breakpoints::dbg_breakpoint) as DebugFn,
         ),
-        (
-            DebugCommandTypes::Print,
-            Box::new(misc::dbg_print) as DebugFn,
-        ),
     ])
 }
 
@@ -148,8 +141,7 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
 ///     - `vm`:         Pointer to the virtual machine to fetch values from memory or PC.
 ///     - `debug_cmds`: The assembled table of debugger command->fn pointers.
 fn check_dbg_input(
-    debug: &mut DebuggerState,
-    vm: &mut VirtualMachine,
+    debug: &mut DebuggerState, vm: &mut VirtualMachine,
     debug_cmds: &HashMap<DebugCommandTypes, DebugFn>,
 ) {
     let mut input_text = String::new();
@@ -161,13 +153,20 @@ fn check_dbg_input(
     if trimmed.len() > 0 {
         let command: DebugCommandTypes =
             DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
-        let mut arguments: Vec<TokenSeparators> = vec![];
+        let mut arguments: Result<DebugTokenStream, InvalidDbgArgError> = Ok(vec![]);
         if trimmed.len() > 1 {
-            arguments = collect_args(trimmed[1..].concat()).unwrap();
+            arguments = str_to_args(trimmed[1..].to_vec(), &debug);
         }
 
         // Call the debugger function.
-        debug_cmds[&command](arguments, debug, vm);
+        match arguments {
+            Ok(arguments) => { 
+                debug_cmds[&command](arguments, debug, vm);
+            }
+            Err(e) => {
+                println!("{}", e);
+            }
+        }
     }
 }
 
@@ -190,13 +189,12 @@ pub fn run(mut vm: VirtualMachine) {
             vm.is_running = emu::step_cpu(&mut vm);
             debugger.steps_to_run -= 1;
 
-            // Stop when we are finished running 
+            // Stop when we are finished running
             if debugger.steps_to_run == 0 {
                 debugger.is_stepping = false;
                 vm.is_running = false;
             }
         }
-
         // If the VM is not currently running, then prompt the user on the debugger.
         else {
             print!(">> ");

@@ -1,18 +1,33 @@
-use super::{utils, TokenSeparators, VirtualMachine};
+use super::{
+    parser::{compute_address_from_args, create_new_tag, DebugTokenStream, TokenStreamHelpers},
+    VirtualMachine,
+};
 
 /// Acts as the controller for all breakpoint functions.
 pub fn dbg_breakpoint(
-    args: Vec<TokenSeparators>,
-    debug: &mut super::DebuggerState,
-    vm: &mut VirtualMachine,
+    args: DebugTokenStream, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
 ) {
-    match utils::compute_address_from_args(args, vm) {
-        Ok(value) => {
-            debug.breakpoints.push(value);
-            println!("Breakpoint set at {:#08X}", value);
+    // If a tag is left in here, generate a new tag.
+    if args.contains_tag() {
+        match create_new_tag(args, vm, &mut debug.tags) {
+            Ok(value) => {
+                debug.breakpoints.push(value);
+                println!("Breakpoint created at {:#08X}", value);
+            }
+            Err(e) => {
+                println!("{}", e);
+            }
         }
-        Err(e) => {
-            println!("{}", e);
+    }
+    else{
+        match compute_address_from_args(args, vm){
+            Ok(value) => {
+                debug.breakpoints.push(value);
+                println!("Breakpoint created at {:#08X}", value);
+            }
+            Err(e) => {
+                println!("{}", e);
+            }
         }
     }
 }

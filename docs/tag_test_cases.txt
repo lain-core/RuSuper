@@ -1,7 +1,40 @@
-b $val tag ~> b$valtag
-b tag $val ~> btag$val
-b tag+val  ~> btag+val 
-b tag+$val ~> btag+$val
+/* Tag before value */
+b tag $808000
+b tag 50
+b tag $808000 + $0A
+b tag $808000 + 50
+b tag +$0A
+b tag +50
 
-b example_index + 0x5000
-example_index + 0x5000
+/* Value before tag */
+b $808000 tag
+b 50 tag
+b $808000 + $0A tag
+b $808000 + 50 tag
+b $0A + tag
+b 50 + tag
+b +$0A tag
+b +50 tag
+
+/* Others */
+b tag
+b tag + tag
+b tag + tag2
+b tag + tag2 tag3
+b tag3 tag + tag2
+
+/// Values where a tag must already exist to match to.
+b tag + $0A
+b tag + 50
+b $0A + tag
+b 50 + tag
+b tag + tag
+b tag + tag2
+b tag + tag2 tag3
+b tag3 tag + tag2
+
+if offset is immediately followed by or following a tag name, look it up
+    spit it out if it is not found
+
+if the offset is not immediately followed by an offset separator, it needs to be a new tag.
+

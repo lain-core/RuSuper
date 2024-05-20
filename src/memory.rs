@@ -4,10 +4,10 @@ use core::fmt;
 /**************************************** Constant Values ***************************************************************/
 const MEMORY_SIZE: usize = (0xFFFFFF) + 1;
 pub const MEMORY_START: usize = 0x000000;
-pub const MEMORY_END: usize = 0xFFFFFF;
-pub const MEMORY_BANK_COUNT: usize = 0xFF; // Number of addressable memory banks.
-pub const MEMORY_BANK_START: usize = 0x0000;
-pub const MEMORY_BANK_SIZE: usize = 0xFFFF; // Size of one memory bank.
+pub const _MEMORY_END: usize = 0xFFFFFF;
+pub const _MEMORY_BANK_COUNT: usize = 0xFF; // Number of addressable memory banks.
+pub const _MEMORY_BANK_START: usize = 0x0000;
+pub const _MEMORY_BANK_SIZE: usize = 0xFFFF; // Size of one memory bank.
 pub const MEMORY_BANK_INDEX: u8 = 16; // Bit index to shift a u8 by to obtain a bank address.
 
 /**************************************** Struct and Type definitions ***************************************************/
@@ -21,9 +21,7 @@ pub struct InvalidAddressError {
 }
 
 impl InvalidAddressError {
-    pub fn new(addr: usize) -> Self {
-        Self { addr: addr }
-    }
+    pub fn new(addr: usize) -> Self { Self { addr: addr } }
 }
 
 impl fmt::Display for InvalidAddressError {
@@ -89,10 +87,7 @@ impl Memory {
     ///     - `Ok(())`:                     If written OK.
     ///     - `InvalidAddressError(e)`:     If an invalid address was passed.
     pub fn put_bank(
-        &mut self,
-        banktype: romdata::BankSize,
-        address: usize,
-        bankdata: &[u8],
+        &mut self, banktype: romdata::BankSize, address: usize, bankdata: &[u8],
     ) -> Result<(), InvalidAddressError> {
         match address_is_valid(address + banktype as usize - 1) {
             Ok(_t) => {
@@ -113,7 +108,7 @@ impl Memory {
     /// # Returns:
     ///     - `Ok(())`:                     If OK.
     ///     - `InvalidAddressError`:        If an invalid address was passed.
-    pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), InvalidAddressError> {
+    pub fn _put_word(&mut self, address: usize, word: u16) -> Result<(), InvalidAddressError> {
         match address_is_valid(address + 1) {
             Ok(_t) => {
                 self.memory[address] = word.to_le_bytes()[0];
@@ -176,6 +171,8 @@ pub fn address_is_valid(address: usize) -> Result<(), InvalidAddressError> {
 mod tests {
     use super::*;
     use rand::{Rng, RngCore};
+
+    const MEMORY_END: usize = 0xFFFFFF;
 
     /**************************************** Test Helpers **************************************************************/
     /// Given a memory ptr fill it with random test data, and return the random test data it was filled from.
@@ -247,7 +244,7 @@ mod tests {
             .try_into()
             .unwrap();
 
-        memory_under_test.put_word(0x000000, 0xAABB).unwrap();
+        memory_under_test._put_word(0x000000, 0xAABB).unwrap();
         assert_eq!(memory_under_test.memory[0], 0xBB);
         assert_eq!(memory_under_test.memory[1], 0xAA);
 
@@ -256,7 +253,7 @@ mod tests {
             if addr % 2 == 0 {
                 rand_word = rand::thread_rng().gen();
                 random_data[addr / 2] = rand_word;
-                memory_under_test.put_word(addr, rand_word).unwrap();
+                memory_under_test._put_word(addr, rand_word).unwrap();
             }
         }
 
@@ -275,7 +272,7 @@ mod tests {
     #[should_panic]
     fn test_put_invalid_word() {
         let mut memory_under_test: Memory = Memory::new();
-        memory_under_test.put_word(MEMORY_SIZE + 1, 0).unwrap();
+        memory_under_test._put_word(MEMORY_SIZE + 1, 0).unwrap();
     }
 
     #[test]
@@ -296,7 +293,7 @@ mod tests {
             if addr % 2 == 0 {
                 rand_word = rand::thread_rng().gen();
                 random_data[addr / 2] = rand_word;
-                memory_under_test.put_word(addr, rand_word).unwrap();
+                memory_under_test._put_word(addr, rand_word).unwrap();
             }
         }
 

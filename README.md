@@ -15,14 +15,13 @@ gdb-style debugger of SNES roms. Upon starting the application, you will be prom
 -   `--no-debug`: Run the program without executing the debugger. Currently hard coded to enable.
 
 ## Debugger Functionality
-Either the prefix `$` or `0x` is allowed wherever an address literal is found to identify a hex value.
+The prefix `$` is allowed wherever an address literal is found to identify a hex value.
 
 - `help` or `h`: Display the **h**elp screen.
 - `p $XXXXXX`: **P**rint the byte and word values at address `$XXXXXX`
 - `r` or `c`: **R**un (or **C**ontinue) the application until the next breakpoint is reached, or the program terminates.
 - `q`, `exit`, `quit`: Terminate the application.
 
-### Unimplemented/TBD
 - Breakpoints
     - `b`: Create a **b**reakpoint at the current PC.
         - `b tag_name`:  Create a breakpoint at the current PC, with the tag name `tag_name`.
@@ -30,6 +29,10 @@ Either the prefix `$` or `0x` is allowed wherever an address literal is found to
         - `b tag_name+X`: Set a breakpoint at the value represented by `tag_name` plus an offset value.
     - `b $XXXXXX`: Create a breakpoint at absolute address `$XXXXXX`.
         - `b $XXXXXX tag_name`: Create a breakpoint at absolute address `$XXXXXX` with the tag name `tag_name`
+
+
+### Unimplemented/TBD
+- Breakpoints
     - `b show`: Show all current breakpoints in a table, with tag names if applicable.
         - `b list`
     - `b del $XXXXXX`: Remove breakpoint at `$XXXXXX`

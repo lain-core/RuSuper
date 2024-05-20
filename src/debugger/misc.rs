@@ -1,24 +1,18 @@
-use super::{utils::HexOperators, TokenSeparators, VirtualMachine};
-use crate::debugger::utils;
+use super::{TokenSeparator, VirtualMachine};
 use std::process::exit;
 
 /**************************************** Constant Values ***************************************************************/
-const NUM_ADDR_BYTES: usize = 3;
 
 /**************************************** File Scope Functions **********************************************************/
 /// Exits the program.
 pub fn dbg_exit(
-    _args: Vec<TokenSeparators>,
-    _debug: &mut super::DebuggerState,
-    _vm: &mut VirtualMachine,
+    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
 ) {
     exit(0);
 }
 
 pub fn dbg_help(
-    _args: Vec<TokenSeparators>,
-    _debug: &mut super::DebuggerState,
-    _vm: &mut VirtualMachine,
+    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
 ) {
     println!("==============================");
     println!("======== RuSuper Help ========\n");
@@ -30,34 +24,28 @@ pub fn dbg_help(
 }
 
 pub fn dbg_invalid(
-    _args: Vec<TokenSeparators>,
-    _debug: &mut super::DebuggerState,
-    _vm: &mut VirtualMachine,
+    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
 ) {
     dbg_help(_args, _debug, _vm);
 }
 
 pub fn dbg_continue(
-    _args: Vec<TokenSeparators>,
-    _debug: &mut super::DebuggerState,
-    vm: &mut VirtualMachine,
+    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
 ) {
     vm.is_running = true;
 }
 
-pub fn dbg_print(
-    args: Vec<TokenSeparators>,
-    debug: &mut super::DebuggerState,
-    vm: &mut VirtualMachine,
-) {
-}
+// pub fn dbg_print(
+//     args: Vec<TokenSeparator>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
+// ) {
+// }
 
 /// Print the value at an absolute memory address.
 /// Parameters:
 ///     - `address`:    Address to read from.
 ///     - `_debug`:     Debugger State, unused.
 ///     - `vm`:         Virtual Machine containing memory to read from.
-fn dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
+fn _dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
     let byte_value = vm.memory.get_byte(address);
     let word_value = vm.memory.get_word(address);
 
@@ -83,10 +71,6 @@ fn dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mu
     }
 
     print!("\n");
-}
-
-fn dbg_print_offset() {
-    println!("Unimplemented");
 }
 
 /**************************************** Tests *************************************************************************/
