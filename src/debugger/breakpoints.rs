@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use super::{
-    parser::{self, compute_address_from_args, create_new_tag, DebugTokenStream, TokenStreamHelpers}, DebuggerState, VirtualMachine
+    parser::{
+        self, compute_address_from_args, create_new_tag, DebugTokenStream, TokenStreamHelpers,
+    },
+    DebuggerState, VirtualMachine,
 };
 
 /**************************************** Struct and Type definitions ***************************************************/
@@ -19,11 +22,13 @@ impl From<&str> for BreakpointSubCommandTypes {
             "show" => Self::List,
             "list" => Self::List,
             "l" => Self::List,
+            "ls" => Self::List,
 
             "delete" => Self::Delete,
             "del" => Self::Delete,
+            "rm" => Self::Delete,
 
-            _ => Self::Set
+            _ => Self::Set,
         }
     }
 }
@@ -34,23 +39,30 @@ type BreakpointFn = Box<dyn Fn(Vec<&str>, &mut DebuggerState, &mut VirtualMachin
 
 fn construct_breakpoint_table() -> HashMap<BreakpointSubCommandTypes, BreakpointFn> {
     HashMap::from([
-        (BreakpointSubCommandTypes::List, Box::new(dbg_breakpoint_list) as BreakpointFn),
-        (BreakpointSubCommandTypes::Delete, Box::new(dbg_breakpoint_delete) as BreakpointFn),
-        (BreakpointSubCommandTypes::Set, Box::new(dbg_breakpoint_set) as BreakpointFn)
+        (
+            BreakpointSubCommandTypes::List,
+            Box::new(dbg_breakpoint_list) as BreakpointFn,
+        ),
+        (
+            BreakpointSubCommandTypes::Delete,
+            Box::new(dbg_breakpoint_delete) as BreakpointFn,
+        ),
+        (
+            BreakpointSubCommandTypes::Set,
+            Box::new(dbg_breakpoint_set) as BreakpointFn,
+        ),
     ])
 }
 
 /// Acts as the controller for all breakpoint functions.
-pub fn dbg_breakpoint(
-    args: Vec<&str>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
-) {
+pub fn dbg_breakpoint(args: Vec<&str>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
     let breakpoint_fns = construct_breakpoint_table();
     if args.len() > 0 {
         let subcmd = BreakpointSubCommandTypes::from(args[0]);
         match subcmd {
             BreakpointSubCommandTypes::Set => {
                 breakpoint_fns[&subcmd](args, debug, vm);
-            },
+            }
             _ => {
                 breakpoint_fns[&subcmd](args[1..].to_vec(), debug, vm);
             }
@@ -58,15 +70,33 @@ pub fn dbg_breakpoint(
     }
 }
 
-fn dbg_breakpoint_list(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine){
-    //
+fn dbg_breakpoint_list(_args: Vec<&str>, debug: &mut DebuggerState, _vm: &mut VirtualMachine) {
+    print!("\n");
+    println!("  Address  | Tag Name  ");
+    println!("-----------------------");
+    debug.breakpoints.sort();
+    for breakpoint in &debug.breakpoints {
+        let tag_name: Option<&String> = debug.tags.iter().find_map(|(ref key, val)| {
+            if val == breakpoint {
+                Some(*key)
+            }
+            else {
+                None
+            }
+        });
+        print!("  ");
+        print!("{:#08X} |", breakpoint);
+        if let Some(name) = tag_name {
+            print!(" {}", name);
+        }
+        print!("  \n");
+    }
+    print!("\n");
 }
 
-fn dbg_breakpoint_delete(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine){
+fn dbg_breakpoint_delete(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine) {}
 
-}
-
-fn dbg_breakpoint_set(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine){
+fn dbg_breakpoint_set(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine) {
     let token_args = parser::str_to_args(args, debug).unwrap();
 
     // If a tag is left in here, generate a new tag.
@@ -81,8 +111,8 @@ fn dbg_breakpoint_set(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut Virtu
             }
         }
     }
-    else{
-        match compute_address_from_args(token_args, vm){
+    else {
+        match compute_address_from_args(token_args, vm) {
             Ok(value) => {
                 debug.breakpoints.push(value);
                 println!("Breakpoint created at {:#08X}", value);
