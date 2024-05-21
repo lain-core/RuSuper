@@ -4,12 +4,13 @@ use super::{
     parser::{self, compute_address_from_args, create_new_tag, DebugTokenStream, TokenStreamHelpers}, DebuggerState, VirtualMachine
 };
 
+/**************************************** Struct and Type definitions ***************************************************/
+
 #[derive(Clone, Hash, PartialEq, Eq)]
 enum BreakpointSubCommandTypes {
     Set,
     List,
     Delete,
-    Invalid
 }
 
 impl From<&str> for BreakpointSubCommandTypes {
@@ -28,6 +29,8 @@ impl From<&str> for BreakpointSubCommandTypes {
 }
 
 type BreakpointFn = Box<dyn Fn(Vec<&str>, &mut DebuggerState, &mut VirtualMachine)>;
+
+/**************************************** File Scope Functions **********************************************************/
 
 fn construct_breakpoint_table() -> HashMap<BreakpointSubCommandTypes, BreakpointFn> {
     HashMap::from([
@@ -90,3 +93,5 @@ fn dbg_breakpoint_set(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut Virtu
         }
     }
 }
+
+/**************************************** Tests *************************************************************************/
