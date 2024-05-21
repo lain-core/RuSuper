@@ -1,11 +1,5 @@
+use super::{parser::*, *};
 use std::collections::HashMap;
-
-use super::{
-    parser::{
-        self, compute_address_from_args, create_new_tag, DebugTokenStream, TokenStreamHelpers,
-    },
-    DebuggerState, VirtualMachine,
-};
 
 /**************************************** Struct and Type definitions ***************************************************/
 
@@ -54,6 +48,67 @@ fn construct_breakpoint_table() -> HashMap<BreakpointSubCommandTypes, Breakpoint
     ])
 }
 
+fn dbg_breakpoint_list(_args: Vec<&str>, debug: &mut DebuggerState, _vm: &mut VirtualMachine) {
+    print!("\n");
+    println!("  Address  | Tag Name  ");
+    println!("-----------------------");
+    debug.breakpoints.sort();
+    for breakpoint in &debug.breakpoints {
+        print!("  ");
+        print!("{:#08X} |", breakpoint);
+        if let Some(name) = debug.tags.find_key(*breakpoint) {
+            print!(" {}", name);
+        }
+        print!("  \n");
+    }
+    print!("\n");
+}
+
+fn dbg_breakpoint_delete(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine) {
+    let token_args = parser::str_to_args(&args);
+    debug.breakpoints.sort();
+
+    if let Ok(tokens) = token_args {
+        if let Some(tags) = tokens.get_tag_names() {
+            for tag in tags {
+                if let Some(value) = debug.tags.remove(&tag) {
+                    debug.breakpoints.remove_value(value);
+                }
+            }
+        }
+        else if let Ok(value) = compute_address_from_args(&tokens, debug, vm) {
+            debug.breakpoints.remove_value(value);
+        }
+    }
+}
+
+fn dbg_breakpoint_set(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine) {
+    let token_args = parser::str_to_args(&args).unwrap();
+    let test_value = compute_address_from_args(&token_args, debug, vm);
+
+    if let Ok(value) = test_value {
+        println!("value was constructed from literals");
+        debug.breakpoints.push(value);
+        println!("Breakpoint created at {:#08X}", value);
+    }
+    else if token_args.contains_tag() {
+        match create_new_tag(&token_args, debug, vm) {
+            Ok(value) => {
+                debug.breakpoints.push(value);
+                println!("Breakpoint created at {:#08X}", value);
+            }
+            Err(e) => {
+                println!("{}", e);
+            }
+        }
+    }
+    else {
+        println!("{}", test_value.unwrap_err());
+    }
+}
+
+/**************************************** Public Functions **************************************************************/
+
 /// Acts as the controller for all breakpoint functions.
 pub fn dbg_breakpoint(args: Vec<&str>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
     let breakpoint_fns = construct_breakpoint_table();
@@ -65,60 +120,6 @@ pub fn dbg_breakpoint(args: Vec<&str>, debug: &mut super::DebuggerState, vm: &mu
             }
             _ => {
                 breakpoint_fns[&subcmd](args[1..].to_vec(), debug, vm);
-            }
-        }
-    }
-}
-
-fn dbg_breakpoint_list(_args: Vec<&str>, debug: &mut DebuggerState, _vm: &mut VirtualMachine) {
-    print!("\n");
-    println!("  Address  | Tag Name  ");
-    println!("-----------------------");
-    debug.breakpoints.sort();
-    for breakpoint in &debug.breakpoints {
-        let tag_name: Option<&String> = debug.tags.iter().find_map(|(ref key, val)| {
-            if val == breakpoint {
-                Some(*key)
-            }
-            else {
-                None
-            }
-        });
-        print!("  ");
-        print!("{:#08X} |", breakpoint);
-        if let Some(name) = tag_name {
-            print!(" {}", name);
-        }
-        print!("  \n");
-    }
-    print!("\n");
-}
-
-fn dbg_breakpoint_delete(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine) {}
-
-fn dbg_breakpoint_set(args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine) {
-    let token_args = parser::str_to_args(args, debug).unwrap();
-
-    // If a tag is left in here, generate a new tag.
-    if token_args.contains_tag() {
-        match create_new_tag(token_args, vm, &mut debug.tags) {
-            Ok(value) => {
-                debug.breakpoints.push(value);
-                println!("Breakpoint created at {:#08X}", value);
-            }
-            Err(e) => {
-                println!("{}", e);
-            }
-        }
-    }
-    else {
-        match compute_address_from_args(token_args, vm) {
-            Ok(value) => {
-                debug.breakpoints.push(value);
-                println!("Breakpoint created at {:#08X}", value);
-            }
-            Err(e) => {
-                println!("{}", e);
             }
         }
     }

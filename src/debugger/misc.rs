@@ -1,19 +1,15 @@
-use super::{TokenSeparator, VirtualMachine};
+use super::VirtualMachine;
 use std::process::exit;
 
 /**************************************** Constant Values ***************************************************************/
 
 /**************************************** File Scope Functions **********************************************************/
 /// Exits the program.
-pub fn dbg_exit(
-    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
-) {
+pub fn dbg_exit(_args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine) {
     exit(0);
 }
 
-pub fn dbg_help(
-    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
-) {
+pub fn dbg_help(_args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine) {
     println!("==============================");
     println!("======== RuSuper Help ========\n");
     println!("==============================");
@@ -23,15 +19,11 @@ pub fn dbg_help(
     println!("c, r\n\tRun the program until a halt is reached, or a breakpoint is hit");
 }
 
-pub fn dbg_invalid(
-    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
-) {
+pub fn dbg_invalid(_args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine) {
     dbg_help(_args, _debug, _vm);
 }
 
-pub fn dbg_continue(
-    _args: Vec<&str>, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
-) {
+pub fn dbg_continue(_args: Vec<&str>, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
     vm.is_running = true;
 }
 
