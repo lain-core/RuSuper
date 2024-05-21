@@ -752,6 +752,35 @@ mod tests {
             ]
         }
 
+        /// Test cases where the arguments are strings.
+        pub fn string_args() -> Vec<Vec<&'static str>> {
+            let vec = vec![
+                /****** Tag before value ******/
+                vec![TEST_TAG_NAME, "$808000"],
+                vec![TEST_TAG_NAME, TEST_DECIMAL_VALUE],
+                vec![TEST_TAG_NAME, "$808000", "+", "$0A"],
+                vec![TEST_TAG_NAME, "$808000", "+", TEST_DECIMAL_VALUE],
+                vec![TEST_TAG_NAME, "+", "$0A"],
+                vec![TEST_TAG_NAME, "+", TEST_DECIMAL_VALUE],
+                /****** Value before tag ******/
+                vec!["$808000", TEST_TAG_NAME],
+                vec![TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                vec!["$808000", "+", "$0A", TEST_TAG_NAME],
+                vec!["$808000", "+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                vec!["$0A", "+", TEST_TAG_NAME],
+                vec![TEST_DECIMAL_VALUE, "+", TEST_TAG_NAME],
+                vec!["+", "$0A", TEST_TAG_NAME],
+                vec!["+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                /****** Other Combinations ******/
+                vec![TEST_TAG_NAME],
+                vec![TEST_TAG_NAME, "+", TEST_TAG_NAME],
+                vec![TEST_TAG_NAME, "+", TEST_TAG_NAME2],
+                vec![TEST_TAG_NAME, "+", TEST_TAG_NAME2, TEST_TAG_NAME3],
+                vec![TEST_TAG_NAME3, TEST_TAG_NAME, "+", TEST_TAG_NAME2],
+            ];
+            vec
+        }
+
         /// Test cases where a tag is represented as Value(tagname).
         pub fn token_tag_as_value() -> Vec<DebugTokenStream> {
             vec![
@@ -1302,30 +1331,7 @@ mod tests {
 
         #[test]
         fn test_collect_args() {
-            let string_vectors: Vec<Vec<&str>> = vec![
-                /****** Tag before value ******/
-                vec![TEST_TAG_NAME, "$808000"],
-                vec![TEST_TAG_NAME, TEST_DECIMAL_VALUE],
-                vec![TEST_TAG_NAME, "$808000", "+", "$0A"],
-                vec![TEST_TAG_NAME, "$808000", "+", TEST_DECIMAL_VALUE],
-                vec![TEST_TAG_NAME, "+", "$0A"],
-                vec![TEST_TAG_NAME, "+", TEST_DECIMAL_VALUE],
-                /****** Value before tag ******/
-                vec!["$808000", TEST_TAG_NAME],
-                vec![TEST_DECIMAL_VALUE, TEST_TAG_NAME],
-                vec!["$808000", "+", "$0A", TEST_TAG_NAME],
-                vec!["$808000", "+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
-                vec!["$0A", "+", TEST_TAG_NAME],
-                vec![TEST_DECIMAL_VALUE, "+", TEST_TAG_NAME],
-                vec!["+", "$0A", TEST_TAG_NAME],
-                vec!["+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
-                /****** Other Combinations ******/
-                vec![TEST_TAG_NAME],
-                vec![TEST_TAG_NAME, "+", TEST_TAG_NAME],
-                vec![TEST_TAG_NAME, "+", TEST_TAG_NAME2],
-                vec![TEST_TAG_NAME, "+", TEST_TAG_NAME2, TEST_TAG_NAME3],
-                vec![TEST_TAG_NAME3, TEST_TAG_NAME, "+", TEST_TAG_NAME2],
-            ];
+            let string_vectors: Vec<Vec<&str>> = string_args();
             let token_vectors = token_tag_as_value();
             for (test_input, expected_result) in zip(string_vectors, token_vectors) {
                 let test_result = collect_args(test_input).unwrap();
@@ -1364,6 +1370,22 @@ mod tests {
                 assert_eq!(expected_result, test_result);
             }
         }
+
+        // #[test]
+        // fn test_create_new_tag() {}
+
+        #[test]
+        fn test_str_to_args() {
+            let string_vectors: Vec<Vec<&str>> = string_args();
+            let token_tag_vectors = token_tag_as_tags();
+
+            for (test_input, expected_output) in zip(string_vectors, token_tag_vectors) {
+                assert_eq!(expected_output, str_to_args(&test_input).unwrap());
+            }
+        }
+
+        // #[test]
+        // fn test_str_to_values() {}
 
         // #[test]
         // fn test_compute_address_from_args() {}
