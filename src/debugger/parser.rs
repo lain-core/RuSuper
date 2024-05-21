@@ -587,20 +587,31 @@ pub fn create_new_tag(
 ) -> Result<usize, InvalidDbgArgError> {
     let result: Result<usize, InvalidDbgArgError>;
 
+    println!("Input to create_new_tag was {:?}", input);
+
     match validate_tags(input.to_vec(), debug) {
         Ok(mut tokens) => {
             if let Some(TokenSeparator::Tag(ref tagname)) = tokens.pop() {
-                match compute_address_from_args(&tokens, debug, vm) {
-                    Ok(value) => {
-                        debug.tags.insert(tagname.to_string(), value);
-                        println!("Tag {} created at {:#08X}", tagname, value);
-                        result = Ok(value);
-                    }
-                    Err(e) => {
-                        result = Err(InvalidDbgArgError::from(format!(
-                            "{} Cannot create tag {}.",
-                            e, tagname
-                        )));
+                // If the length of this is 0, then the parameter was just `tagname`.
+                // Make a tag at PC.
+                if tokens.len() == 0{
+                    debug.tags.insert(tagname.to_string(), vm.cpu.get_pc());
+                    println!("Tag {} created at {:#08X}", tagname, vm.cpu.get_pc());
+                    result = Ok(vm.cpu.get_pc());
+                }
+                else {
+                    match compute_address_from_args(&tokens, debug, vm) {
+                        Ok(value) => {
+                            debug.tags.insert(tagname.to_string(), value);
+                            println!("Tag {} created at {:#08X}", tagname, value);
+                            result = Ok(value);
+                        }
+                        Err(e) => {
+                            result = Err(InvalidDbgArgError::from(format!(
+                                "{} Cannot create tag {}.",
+                                e, tagname
+                            )));
+                        }
                     }
                 }
             }
@@ -1371,8 +1382,92 @@ mod tests {
             }
         }
 
-        // #[test]
-        // fn test_create_new_tag() {}
+        #[test]
+        fn test_create_new_tag() {
+            let mut debug = DebuggerState::new();
+            let vm = VirtualMachine::new();
+
+            let test_tag_tokens = token_tag_as_tags();
+
+            let numeric_results: Vec<Option<usize>> = vec![
+                Some(0x808000),     // tag $808000
+                Some(50),           // tag 50
+                Some(0x80800A),     // tag $808000 + $0A
+                Some(0x808032),     // tag $808000 + 50
+                None,               // tag +$0A 
+                None,               // tag +50
+
+                /* Value before tag */
+                Some(0x808000),     // $808000 tag
+                Some(50),           // 50 tag
+                Some(0x80800A),     // $808000 + $0A tag
+                Some(0x808032),     // $808000 + 50 tag
+                None, // will fail  // $0A + tag
+                None, // will fail  // 50 + tag
+                None, // will fail  // +$0A tag
+                None, // will fail  // +50 tag
+                
+                /* Other */
+                Some(0x808000),     // tag
+                None, // will fail, // tag + tag
+                None, // will fail, // tag + tag2
+                None, // will fail, // tag + tag2 tag3
+                None, // will fail  // tag3 tag + tag2
+            ];
+
+            for (test_input, expected_result) in zip(test_tag_tokens, numeric_results) {
+                if let Some(expected_result) = expected_result{
+                    assert_eq!(expected_result, create_new_tag(&test_input, &mut debug, &vm).unwrap());
+                    assert_eq!(expected_result, *debug.tags.get(TEST_TAG_NAME).unwrap());
+                    debug.tags.clear();
+                }
+            }
+        }
+
+        #[test]
+        fn test_create_new_tag_from_existing() {
+            let mut debug = DebuggerState::new();
+            let vm = VirtualMachine::new();
+
+            debug.tags.insert(TEST_TAG_NAME.to_string(), 0x808000);
+            debug.tags.insert(TEST_TAG_NAME2.to_string(), 0x0A);
+
+            let test_tag_tokens = token_tag_as_tags();
+
+            let numeric_results: Vec<Option<usize>> = vec![
+                None,           // tag $808000
+                None,           // tag 50
+                None,           // tag $808000 + $0A
+                None,           // tag $808000 + 50
+                None,           // tag +$0A
+                None,           // tag +50
+
+                /* Value before tag */
+                None,           // $808000 tag
+                None,           // 50 tag
+                None,           // $808000 + $0A tag
+                None,           // $808000 + 50 tag
+                None,           // $0A + tag
+                None,           // 50 + tag
+                None,           // +$0A tag
+                None,           // +50 tag
+                
+                /* Other */
+                None,           // tag
+                None,           // tag + tag
+                None,           // tag + tag2
+                Some(0x80800A), // tag + tag2 tag3
+                Some(0x80800A), // tag3 tag + tag2
+            ];
+
+            for (test_input, expected_result) in zip(test_tag_tokens, numeric_results) {
+                if let Some(expected_result) = expected_result{
+                    assert_eq!(expected_result, create_new_tag(&test_input, &mut debug, &vm).unwrap());
+                    assert_eq!(expected_result, *debug.tags.get(TEST_TAG_NAME3).unwrap());
+                    debug.tags.remove(TEST_TAG_NAME3);
+                }
+            }
+        }
 
         #[test]
         fn test_str_to_args() {
