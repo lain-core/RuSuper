@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug};
 
-use crate::emu::VirtualMachine;
+use crate::{emu::VirtualMachine, memory::MEMORY_END};
 
 use super::{DebuggerState, TokenSeparator};
 
@@ -437,7 +437,7 @@ fn apply_modifiers(
 
 /// Take a composed token list and compute a finalized address value.
 /// Parameters:
-///     - `args`: Arguments passed to the command, as a vector of TokenSeparator.
+///     - `args`: Arguments passed to the command, where tags are represented as Value(*tagname).
 ///     - `vm`:     Virtual machine to access memory or program counter from.
 /// Returns:
 ///     - `address`: A fully computed address.
@@ -449,6 +449,7 @@ fn compute_address_from_args(
     let mut last_value: Option<String> = None;
     let mut operator_found: bool = true;
 
+    println!("Passed in was {:?}", args);
     let mut deref_args = args.clone();
     if args.contains_tag() {
         match validate_tags(deref_args, &debug) {
@@ -497,7 +498,15 @@ fn compute_address_from_args(
     }
 
     match address {
-        Some(val) => Ok(val),
+        Some(val) => {
+            // Lastly, check if the computed value is within memory bounds.
+            if val < MEMORY_END {
+                Ok(val)
+            }
+            else {
+                Err(InvalidDbgArgError::from(format!("Final value {:#X} was out of memory bounds.", val)))
+            }
+        }
         None => Err(InvalidDbgArgError::from(
             "Could not discern a value from arguments passed.",
         )),
@@ -639,6 +648,8 @@ pub fn create_new_tag(
 pub fn str_to_values(
     args: &Vec<&str>, debug: &DebuggerState, vm: &VirtualMachine,
 ) -> Result<(Option<Vec<String>>, usize), InvalidDbgArgError> {
+    
+    
     // Initialize the result vars
     let token_args = str_to_args(&args)?;
     let mut cmd_res: Result<(Option<Vec<String>>, usize), InvalidDbgArgError> =
@@ -764,7 +775,7 @@ mod tests {
         }
 
         /// Test cases where the arguments are strings.
-        pub fn string_args() -> Vec<Vec<&'static str>> {
+        pub fn tag_string_args() -> Vec<Vec<&'static str>> {
             let vec = vec![
                 /****** Tag before value ******/
                 vec![TEST_TAG_NAME, "$808000"],
@@ -1342,7 +1353,7 @@ mod tests {
 
         #[test]
         fn test_collect_args() {
-            let string_vectors: Vec<Vec<&str>> = string_args();
+            let string_vectors: Vec<Vec<&str>> = tag_string_args();
             let token_vectors = token_tag_as_value();
             for (test_input, expected_result) in zip(string_vectors, token_vectors) {
                 let test_result = collect_args(test_input).unwrap();
@@ -1404,8 +1415,8 @@ mod tests {
                 Some(0x808032),     // $808000 + 50 tag
                 None, // will fail  // $0A + tag
                 None, // will fail  // 50 + tag
-                None, // will fail  // +$0A tag
-                None, // will fail  // +50 tag
+                Some(0x80800A),     // +$0A tag
+                Some(0x808032),     // +50 tag
                 
                 /* Other */
                 Some(0x808000),     // tag
@@ -1420,6 +1431,9 @@ mod tests {
                     assert_eq!(expected_result, create_new_tag(&test_input, &mut debug, &vm).unwrap());
                     assert_eq!(expected_result, *debug.tags.get(TEST_TAG_NAME).unwrap());
                     debug.tags.clear();
+                }
+                else {
+                    assert!(create_new_tag(&test_input, &mut debug, &vm).is_err());
                 }
             }
         }
@@ -1466,12 +1480,15 @@ mod tests {
                     assert_eq!(expected_result, *debug.tags.get(TEST_TAG_NAME3).unwrap());
                     debug.tags.remove(TEST_TAG_NAME3);
                 }
+                else {
+                    assert!(create_new_tag(&test_input, &mut debug, &vm).is_err());
+                }
             }
         }
 
         #[test]
         fn test_str_to_args() {
-            let string_vectors: Vec<Vec<&str>> = string_args();
+            let string_vectors: Vec<Vec<&str>> = tag_string_args();
             let token_tag_vectors = token_tag_as_tags();
 
             for (test_input, expected_output) in zip(string_vectors, token_tag_vectors) {
@@ -1479,11 +1496,94 @@ mod tests {
             }
         }
 
-        // #[test]
-        // fn test_str_to_values() {}
+        #[test]
+        fn test_str_to_values() {
+            let string_vectors = tag_string_args();
+            let value_result: Vec<Option<(Option<Vec<String>>, usize)>> = vec![
+                /****** Tag before value ******/
+                None,//vec![TEST_TAG_NAME, "$808000"],
+                None,//vec![TEST_TAG_NAME, TEST_DECIMAL_VALUE],
+                None,//vec![TEST_TAG_NAME, "$808000", "+", "$0A"],
+                None,//vec![TEST_TAG_NAME, "$808000", "+", TEST_DECIMAL_VALUE],
+                Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x80800A)),//vec![TEST_TAG_NAME, "+", "$0A"],
+                Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x808032)),//vec![TEST_TAG_NAME, "+", TEST_DECIMAL_VALUE],
+                /****** Value before tag ******/
+                None,//vec!["$808000", TEST_TAG_NAME],
+                None,//vec![TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                None,//vec!["$808000", "+", "$0A", TEST_TAG_NAME],
+                None,//vec!["$808000", "+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x80800A)),//vec!["$0A", "+", TEST_TAG_NAME],
+                Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x808032)),//vec![TEST_DECIMAL_VALUE, "+", TEST_TAG_NAME],
+                None,//vec!["+", "$0A", TEST_TAG_NAME],
+                None,//vec!["+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                /****** Other Combinations ******/
+                Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x808000)),//vec![TEST_TAG_NAME],
+                None,//vec![TEST_TAG_NAME, "+", TEST_TAG_NAME],
+                Some((Some(vec![TEST_TAG_NAME.to_string(), TEST_TAG_NAME2.to_string()]), 0x80800A)),//vec![TEST_TAG_NAME, "+", TEST_TAG_NAME2],
+                None,//vec![TEST_TAG_NAME, "+", TEST_TAG_NAME2, TEST_TAG_NAME3],
+                None,//vec![TEST_TAG_NAME3, TEST_TAG_NAME, "+", TEST_TAG_NAME2],
+                //(Some(vec![TEST_TAG_NAME3.to_string()]), 0x80800A),
+            ];
+            let mut test_debug = DebuggerState::new();
+            let test_vm = VirtualMachine::new();
 
-        // #[test]
-        // fn test_compute_address_from_args() {}
+            test_debug.tags.insert(TEST_TAG_NAME.to_string(), 0x808000);
+            test_debug.tags.insert(TEST_TAG_NAME2.to_string(), 0x0A);
+            test_debug.tags.insert(TEST_TAG_NAME3.to_string(), 0x80800A);
+
+            for (test_input, expected_result) in zip(string_vectors, value_result) {
+                if let Some(result) = expected_result{
+                    assert_eq!(result, str_to_values(&test_input, &test_debug, &test_vm).unwrap())
+                }
+                else{
+                    assert!(str_to_values(&test_input, &test_debug, &test_vm).is_err());
+                }
+            }
+        }
+
+        #[test]
+        fn test_compute_address_from_args() {
+            let token_vectors = token_tag_as_deref();
+            let numeric_results: Vec<Option<usize>> = vec![
+                None,           // tag $808000
+                None,           // tag 50
+                None,           // tag $808000 + $0A
+                None,           // tag $808000 + 50
+                Some(0x80800A), // tag +$0A 
+                Some(0x808032), // tag +50
+
+                /* Value before tag */
+                None,           // $808000 tag
+                None,           // 50 tag
+                None,           // $808000 + $0A tag
+                None,           // $808000 + 50 tag
+                Some(0x80800A), // $0A + tag
+                Some(0x808032), // 50 + tag
+                None, // will fail  // +$0A tag
+                None, // will fail  // +50 tag
+                
+                /* Other */
+                Some(0x808000),     // tag
+                None,  // tag + tag
+                Some(0x80800A),     // tag + tag2
+                None, // will fail, // tag + tag2 tag3
+                None, // will fail  // tag3 tag + tag2
+            ];
+            let mut test_debug = DebuggerState::new();
+            let test_vm = VirtualMachine::new();
+
+            test_debug.tags.insert(TEST_TAG_NAME.to_string(), 0x808000);
+            test_debug.tags.insert(TEST_TAG_NAME2.to_string(), 0x0A);
+
+            for(test_input, expected_result) in zip(token_vectors, numeric_results){
+                if let Some(result) = expected_result{
+                    assert_eq!(result, compute_address_from_args(&test_input, &test_debug, &test_vm).unwrap());
+                }
+                else {
+                    assert!(compute_address_from_args(&test_input, &test_debug, &test_vm).is_err());
+                }
+            }
+        }
 
         // #[test]
         // fn test_apply_modifiers() {}

@@ -4,7 +4,7 @@ use core::fmt;
 /**************************************** Constant Values ***************************************************************/
 const MEMORY_SIZE: usize = (0xFFFFFF) + 1;
 pub const MEMORY_START: usize = 0x000000;
-pub const _MEMORY_END: usize = 0xFFFFFF;
+pub const MEMORY_END: usize = 0xFFFFFF;
 pub const _MEMORY_BANK_COUNT: usize = 0xFF; // Number of addressable memory banks.
 pub const _MEMORY_BANK_START: usize = 0x0000;
 pub const _MEMORY_BANK_SIZE: usize = 0xFFFF; // Size of one memory bank.
