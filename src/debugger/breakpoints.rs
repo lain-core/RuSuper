@@ -63,9 +63,8 @@ fn dbg_breakpoint_list(
         if let Some(name) = debug.tags.find_key(*breakpoint) {
             print!(" {}", name);
         }
-        print!("  \n");
+        println!("  \n-----------------------");
     }
-    print!("\n");
     Ok(())
 }
 
@@ -86,13 +85,16 @@ fn dbg_breakpoint_delete(
             match compute_address_from_args(&tokens, debug, vm) {
                 Ok(value) => {
                     debug.breakpoints.remove_value(value);
+                    println!("Deleted breakpoint at {:#08X}", value);
                 }
                 Err(e) => cmd_result = Err(e),
             }
+
             // If there are currently tags set, pass through and see if this value matches any.
             if let Some(tags) = tokens.get_tag_names() {
                 for tag in tags {
                     debug.tags.remove(&tag);
+                    println!("Deleted tag {}", &tag);
                 }
             }
         }
@@ -111,47 +113,32 @@ fn dbg_breakpoint_set(
 ) -> Result<(), InvalidDbgArgError> {
     let mut cmd_result: Result<(), InvalidDbgArgError> = Ok(());
     let token_args = parser::str_to_args(&args).unwrap();
-    let test_value = compute_address_from_args(&token_args, debug, vm);
+    let mut test_value = compute_address_from_args(&token_args, debug, vm);
 
     // If there were no arguments passed just set a breakpoint at the PC if possible
     if args.len() == 0 {
-        if debug.breakpoints.contains(&vm.cpu.get_pc()) {
-            cmd_result = Err(InvalidDbgArgError::from(format!(
-                "Value {:#08X} already exists in breakpoints.",
-                &vm.cpu.get_pc()
-            )));
-        }
-        else {
-            debug.breakpoints.push(vm.cpu.get_pc());
-            println!("Breakpoint created at {:#08X}", vm.cpu.get_pc());
-        }
+        test_value = Ok(vm.cpu.get_pc());
     }
     else {
         // If the value was constructed purely from literals, or it was made of existing tags, throw it on.
-        if let Ok(value) = test_value {
-            if debug.breakpoints.contains(&value) {
+        // Otherwise we need to make a new tag so try to do so.
+        if token_args.contains_tag() {
+            test_value = create_new_tag(&token_args, debug, vm);
+        }
+    }
+
+    if let Ok(value) = test_value {
+        match debug.breakpoints.contains(&value) {
+            true => {
                 cmd_result = Err(InvalidDbgArgError::from(format!(
-                    "Value {:#08X} already exists in breakpoints.",
+                    "{:#08X} already exists in breakpoints.",
                     value
-                )));
+                )))
             }
-            else {
+            false => {
                 debug.breakpoints.push(value);
                 println!("Breakpoint created at {:#08X}", value);
             }
-        }
-        // Otherwise we need to make a new tag so try to do so.
-        else if token_args.contains_tag() {
-            match create_new_tag(&token_args, debug, vm) {
-                Ok(value) => {
-                    debug.breakpoints.push(value);
-                    println!("Breakpoint created at {:#08X}", value);
-                }
-                Err(e) => cmd_result = Err(e),
-            }
-        }
-        else {
-            cmd_result = Err(test_value.unwrap_err());
         }
     }
     return cmd_result;
