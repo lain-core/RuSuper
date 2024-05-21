@@ -109,7 +109,7 @@ impl From<&str> for TokenSeparator {
     }
 }
 
-type DebugFn = Box<dyn Fn(DebugTokenStream, &mut DebuggerState, &mut VirtualMachine)>;
+type DebugFn = Box<dyn Fn(Vec<&str>, &mut DebuggerState, &mut VirtualMachine)>;
 
 /**************************************** File Scope Functions **********************************************************/
 
@@ -153,20 +153,9 @@ fn check_dbg_input(
     if trimmed.len() > 0 {
         let command: DebugCommandTypes =
             DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
-        let mut arguments: Result<DebugTokenStream, InvalidDbgArgError> = Ok(vec![]);
-        if trimmed.len() > 1 {
-            arguments = str_to_args(trimmed[1..].to_vec(), &debug);
-        }
 
-        // Call the debugger function.
-        match arguments {
-            Ok(arguments) => { 
-                debug_cmds[&command](arguments, debug, vm);
-            }
-            Err(e) => {
-                println!("{}", e);
-            }
-        }
+            // Call the debugger function.
+            debug_cmds[&command](trimmed[1..].to_vec(), debug, vm);
     }
 }
 

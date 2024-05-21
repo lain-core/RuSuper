@@ -6,13 +6,13 @@ use std::process::exit;
 /**************************************** File Scope Functions **********************************************************/
 /// Exits the program.
 pub fn dbg_exit(
-    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
 ) {
     exit(0);
 }
 
 pub fn dbg_help(
-    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
 ) {
     println!("==============================");
     println!("======== RuSuper Help ========\n");
@@ -24,13 +24,13 @@ pub fn dbg_help(
 }
 
 pub fn dbg_invalid(
-    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
 ) {
     dbg_help(_args, _debug, _vm);
 }
 
 pub fn dbg_continue(
-    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
 ) {
     vm.is_running = true;
 }
