@@ -77,7 +77,7 @@ fn dbg_breakpoint_delete(
 ) -> Result<(), InvalidDbgArgError> {
     debug.breakpoints.sort();
 
-    match parser::str_to_values(args, debug, vm) {
+    match parser::str_to_values(&args, debug, vm) {
         Ok((tags, address)) => {
             if debug.breakpoints.contains(&address) {
                 debug.breakpoints.remove_value(address);
@@ -119,18 +119,21 @@ fn dbg_breakpoint_set(
 ) -> Result<(), InvalidDbgArgError> {
     let mut cmd_result: Result<(), InvalidDbgArgError> = Ok(());
     let token_args = parser::str_to_args(&args).unwrap();
-    let mut test_value = compute_address_from_args(&token_args, debug, vm);
+    let mut test_value: Result<usize, InvalidDbgArgError> = Err(InvalidDbgArgError::from(""));
+
+
 
     // If there were no arguments passed just set a breakpoint at the PC if possible
     if args.len() == 0 {
         test_value = Ok(vm.cpu.get_pc());
     }
-    else {
+    else if token_args.contains_tag() {
         // If the value was constructed purely from literals, or it was made of existing tags, throw it on.
         // Otherwise we need to make a new tag so try to do so.
-        if token_args.contains_tag() {
-            test_value = create_new_tag(&token_args, debug, vm);
-        }
+        test_value = create_new_tag(&token_args, debug, vm);
+    }
+    else if let Ok((_, value)) = str_to_values(&args, debug, vm) {
+        test_value = Ok(value);
     }
 
     if let Ok(value) = test_value {
