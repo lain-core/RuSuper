@@ -8,6 +8,8 @@ use std::{
     fmt::Debug,
     io::{self, Write},
 };
+
+use self::parser::InvalidDbgArgError;
 /**************************************** Struct and Type definitions ***************************************************/
 
 pub type DebugTagTable = HashMap<String, usize>;
@@ -150,7 +152,9 @@ impl From<&str> for TokenSeparator {
     }
 }
 
-type DebugFn = Box<dyn Fn(Vec<&str>, &mut DebuggerState, &mut VirtualMachine)>;
+type DebugFn = Box<
+    dyn Fn(Vec<&str>, &mut DebuggerState, &mut VirtualMachine) -> Result<(), InvalidDbgArgError>,
+>;
 
 /**************************************** File Scope Functions **********************************************************/
 
@@ -196,7 +200,9 @@ fn check_dbg_input(
             DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
 
         // Call the debugger function.
-        debug_cmds[&command](trimmed[1..].to_vec(), debug, vm);
+        if let Err(err_msg) = debug_cmds[&command](trimmed[1..].to_vec(), debug, vm) {
+            println!("{}", err_msg);
+        }
     }
 }
 

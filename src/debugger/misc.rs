@@ -1,15 +1,19 @@
-use super::VirtualMachine;
+use super::{parser::InvalidDbgArgError, VirtualMachine};
 use std::process::exit;
 
 /**************************************** Constant Values ***************************************************************/
 
 /**************************************** File Scope Functions **********************************************************/
 /// Exits the program.
-pub fn dbg_exit(_args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine) {
+pub fn dbg_exit(
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
     exit(0);
 }
 
-pub fn dbg_help(_args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine) {
+pub fn dbg_help(
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
     println!("==============================");
     println!("======== RuSuper Help ========\n");
     println!("==============================");
@@ -17,14 +21,21 @@ pub fn dbg_help(_args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut V
     println!("exit, quit, q\n\tTerminate the program");
     println!("b $XXXXXX\n\tSets a breakpoint for address $XXXXXX");
     println!("c, r\n\tRun the program until a halt is reached, or a breakpoint is hit");
+    Ok(())
 }
 
-pub fn dbg_invalid(_args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine) {
-    dbg_help(_args, _debug, _vm);
+pub fn dbg_invalid(
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
+    dbg_help(_args, _debug, _vm)?;
+    Err(InvalidDbgArgError::from("Invalid Command."))
 }
 
-pub fn dbg_continue(_args: Vec<&str>, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
+pub fn dbg_continue(
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
     vm.is_running = true;
+    Ok(())
 }
 
 // pub fn dbg_print(
