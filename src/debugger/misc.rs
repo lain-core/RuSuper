@@ -44,26 +44,24 @@ pub fn dbg_continue(
 pub fn dbg_print(
     args: Vec<&str>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
 ) -> Result<(), InvalidDbgArgError> {
-    if let result = str_to_values(args, debug, vm) {
-        match result {
-            Ok((_, address)) => {
-                if let Ok(value) = vm.memory.get_word(address) {
-                    println!(
-                        "{:#08X} Byte Value: {:#04X} Word Value: {:#06X}",
-                        address,
-                        vm.memory.get_byte(address).expect(""),
-                        value
-                    );
-                }
-                else {
-                    return Err(InvalidDbgArgError::from(format!(
-                        "{:#08X} is out of range of memory.",
-                        address
-                    )));
-                }
+    match str_to_values(&args, debug, vm) {
+        Ok((_, address)) => {
+            if let Ok(value) = vm.memory.get_word(address) {
+                println!(
+                    "{:#08X} Byte Value: {:#04X} Word Value: {:#06X}",
+                    address,
+                    vm.memory.get_byte(address).expect(""),
+                    value
+                );
             }
-            Err(e) => return Err(e),
+            else {
+                return Err(InvalidDbgArgError::from(format!(
+                    "{:#08X} is out of range of memory.",
+                    address
+                )));
+            }
         }
+        Err(e) => return Err(e),
     }
     Ok(())
 }

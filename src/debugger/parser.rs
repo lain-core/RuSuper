@@ -435,6 +435,75 @@ fn apply_modifiers(
     Ok(scratch_value)
 }
 
+/// Take a composed token list and compute a finalized address value.
+/// Parameters:
+///     - `args`: Arguments passed to the command, as a vector of TokenSeparator.
+///     - `vm`:     Virtual machine to access memory or program counter from.
+/// Returns:
+///     - `address`: A fully computed address.
+fn compute_address_from_args(
+    args: &DebugTokenStream, debug: &DebuggerState, vm: &VirtualMachine,
+) -> Result<usize, InvalidDbgArgError> {
+    let mut address: Option<usize> = None;
+    let mut modifiers: Vec<TokenSeparator> = vec![];
+    let mut last_value: Option<String> = None;
+    let mut operator_found: bool = true;
+
+    let mut deref_args = args.clone();
+    if args.contains_tag() {
+        match validate_tags(deref_args, &debug) {
+            Ok(tokens) => {
+                // If the tokens still contain a tag, return an error because the value can't be calculated.
+                if tokens.contains_tag() {
+                    return Err(InvalidDbgArgError::from(
+                        "Value contained a tag which could not be dereferenced",
+                    ));
+                }
+                else {
+                    deref_args = tokens;
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    // If the token is a value, apply the modifiers, then
+    //      Check if there was an operator found between this and the last value. If not, raise an error.
+    // If the token is a modifier, then mark that one was found and push it on.
+    // Otherwise, just push it as it is onto the stack.
+    for token in deref_args.iter() {
+        match token {
+            TokenSeparator::Value(data) => {
+                match apply_modifiers(&mut modifiers, vm, address, data.to_string()) {
+                    Ok(newaddr) => address = Some(newaddr),
+                    Err(e) => return Err(e),
+                }
+                if !operator_found {
+                    return Err(InvalidDbgArgError::from(format!(
+                        "No operator found between {} and {}.",
+                        last_value.expect(""),
+                        data
+                    )));
+                }
+                operator_found = false;
+                last_value = Some(data.clone());
+            }
+            TokenSeparator::Offset => {
+                operator_found = true;
+                modifiers.push(token.clone());
+            }
+            _ => modifiers.push(token.clone()),
+        }
+    }
+
+    match address {
+        Some(val) => Ok(val),
+        None => Err(InvalidDbgArgError::from(
+            "Could not discern a value from arguments passed.",
+        )),
+    }
+}
+
 /// Convert a String value into a constructed hex value.
 /// E.G., "$808000" becomes 0x808000.
 /// Parameters:
@@ -508,75 +577,6 @@ pub fn str_to_args(argvec: &Vec<&str>) -> Result<DebugTokenStream, InvalidDbgArg
     return arg_result;
 }
 
-/// Take a composed token list and compute a finalized address value.
-/// Parameters:
-///     - `args`: Arguments passed to the command, as a vector of TokenSeparator.
-///     - `vm`:     Virtual machine to access memory or program counter from.
-/// Returns:
-///     - `address`: A fully computed address.
-pub fn compute_address_from_args(
-    args: &DebugTokenStream, debug: &DebuggerState, vm: &VirtualMachine,
-) -> Result<usize, InvalidDbgArgError> {
-    let mut address: Option<usize> = None;
-    let mut modifiers: Vec<TokenSeparator> = vec![];
-    let mut last_value: Option<String> = None;
-    let mut operator_found: bool = true;
-
-    let mut deref_args = args.clone();
-    if args.contains_tag() {
-        match validate_tags(deref_args, &debug) {
-            Ok(tokens) => {
-                // If the tokens still contain a tag, return an error because the value can't be calculated.
-                if tokens.contains_tag() {
-                    return Err(InvalidDbgArgError::from(
-                        "Value contained a tag which could not be dereferenced",
-                    ));
-                }
-                else {
-                    deref_args = tokens;
-                }
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // If the token is a value, apply the modifiers, then
-    //      Check if there was an operator found between this and the last value. If not, raise an error.
-    // If the token is a modifier, then mark that one was found and push it on.
-    // Otherwise, just push it as it is onto the stack.
-    for token in deref_args.iter() {
-        match token {
-            TokenSeparator::Value(data) => {
-                match apply_modifiers(&mut modifiers, vm, address, data.to_string()) {
-                    Ok(newaddr) => address = Some(newaddr),
-                    Err(e) => return Err(e),
-                }
-                if !operator_found {
-                    return Err(InvalidDbgArgError::from(format!(
-                        "No operator found between {} and {}.",
-                        last_value.expect(""),
-                        data
-                    )));
-                }
-                operator_found = false;
-                last_value = Some(data.clone());
-            }
-            TokenSeparator::Offset => {
-                operator_found = true;
-                modifiers.push(token.clone());
-            }
-            _ => modifiers.push(token.clone()),
-        }
-    }
-
-    match address {
-        Some(val) => Ok(val),
-        None => Err(InvalidDbgArgError::from(
-            "Could not discern a value from arguments passed.",
-        )),
-    }
-}
-
 /// Take a stream, apply modifiers to the numeric values, and then create a tag.
 /// # Parameters:
 ///     - `&tokens`:     Stream of tokens to parse, where tags have been deref'd where possible.
@@ -617,9 +617,16 @@ pub fn create_new_tag(
     return result;
 }
 
-
+/// Convert arguments as a vector of strings into a computed address value and any tags that match that value, where possible.
+/// # Parameters:
+///     - `args`:       List of arguments to parse.
+///     - `debug`:      Pointer to debugger to read/write tags.
+///     - `vm`:         Pointer to virtual machine, to fetch PC from.
+/// # Result:
+///     - `Ok(Option<Vec<String>>, usize)`: a pair of all the tags that match to value, and a computed address at value.
+///     - `Err(InvalidDbgArgError)`:        Any error found while parsing.
 pub fn str_to_values(
-    args: Vec<&str>, debug: &DebuggerState, vm: &VirtualMachine,
+    args: &Vec<&str>, debug: &DebuggerState, vm: &VirtualMachine,
 ) -> Result<(Option<Vec<String>>, usize), InvalidDbgArgError> {
     // Initialize the result vars
     let token_args = str_to_args(&args)?;
