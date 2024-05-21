@@ -617,6 +617,42 @@ pub fn create_new_tag(
     return result;
 }
 
+
+pub fn str_to_values(
+    args: Vec<&str>, debug: &DebuggerState, vm: &VirtualMachine,
+) -> Result<(Option<Vec<String>>, usize), InvalidDbgArgError> {
+    // Initialize the result vars
+    let token_args = str_to_args(&args)?;
+    let mut cmd_res: Result<(Option<Vec<String>>, usize), InvalidDbgArgError> =
+        Err(InvalidDbgArgError::from("Unable to parse arguments"));
+    let mut res_tags: Option<Vec<String>> = None;
+    let mut res_value: Option<usize> = None;
+
+    match compute_address_from_args(&token_args, debug, vm) {
+        Ok(value) => res_value = Some(value),
+        Err(e) => cmd_res = Err(e),
+    }
+
+    // If there are currently tags set, pass through and see if this value matches any.
+    if let Some(tags) = token_args.get_tag_names() {
+        res_tags = Some(vec![]);
+        for tag in tags {
+            res_tags.as_mut().expect("").push(tag.clone());
+        }
+    }
+
+    if let Some(value) = res_value {
+        if let Some(tags) = res_tags {
+            cmd_res = Ok((Some(tags.to_vec()), value));
+        }
+        else {
+            cmd_res = Ok((None, value));
+        }
+    }
+
+    return cmd_res;
+}
+
 /**************************************** Tests *************************************************************************/
 
 #[cfg(test)]

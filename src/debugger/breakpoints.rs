@@ -75,32 +75,38 @@ fn dbg_breakpoint_list(
 fn dbg_breakpoint_delete(
     args: Vec<&str>, debug: &mut DebuggerState, vm: &mut VirtualMachine,
 ) -> Result<(), InvalidDbgArgError> {
-    let mut cmd_result: Result<(), InvalidDbgArgError> = Ok(());
-    let token_args = parser::str_to_args(&args);
     debug.breakpoints.sort();
 
-    match token_args {
-        Ok(tokens) => {
-            // Remove this value from the breakpoint list.
-            match compute_address_from_args(&tokens, debug, vm) {
-                Ok(value) => {
-                    debug.breakpoints.remove_value(value);
-                    println!("Deleted breakpoint at {:#08X}", value);
-                }
-                Err(e) => cmd_result = Err(e),
+    match parser::str_to_values(args, debug, vm) {
+        Ok((tags, address)) => {
+            if debug.breakpoints.contains(&address) {
+                debug.breakpoints.remove_value(address);
+                println!("Deleted {:#08X} from breakpoints", address);
+            }
+            else {
+                return Err(InvalidDbgArgError::from(format!(
+                    "Breakpoint {:#08X} does not exist",
+                    address
+                )));
             }
 
-            // If there are currently tags set, pass through and see if this value matches any.
-            if let Some(tags) = tokens.get_tag_names() {
+            if let Some(tags) = tags {
                 for tag in tags {
-                    debug.tags.remove(&tag);
-                    println!("Deleted tag {}", &tag);
+                    if let None = debug.tags.remove(&tag) {
+                        return Err(InvalidDbgArgError::from(format!(
+                            "Tag {} does not exist.",
+                            tag
+                        )));
+                    }
+                    else {
+                        println!("Deleted {} from tags", &tag);
+                    }
                 }
             }
         }
-        Err(e) => cmd_result = Err(e),
+        Err(e) => return Err(e),
     }
-    return cmd_result;
+    Ok(())
 }
 
 /// Set a breakpoint.

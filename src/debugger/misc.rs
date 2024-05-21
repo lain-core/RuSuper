@@ -1,4 +1,7 @@
-use super::{parser::InvalidDbgArgError, VirtualMachine};
+use super::{
+    parser::{str_to_values, InvalidDbgArgError},
+    VirtualMachine,
+};
 use std::process::exit;
 
 /**************************************** Constant Values ***************************************************************/
@@ -38,10 +41,32 @@ pub fn dbg_continue(
     Ok(())
 }
 
-// pub fn dbg_print(
-//     args: Vec<TokenSeparator>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
-// ) {
-// }
+pub fn dbg_print(
+    args: Vec<&str>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
+    if let result = str_to_values(args, debug, vm) {
+        match result {
+            Ok((_, address)) => {
+                if let Ok(value) = vm.memory.get_word(address) {
+                    println!(
+                        "{:#08X} Byte Value: {:#04X} Word Value: {:#06X}",
+                        address,
+                        vm.memory.get_byte(address).expect(""),
+                        value
+                    );
+                }
+                else {
+                    return Err(InvalidDbgArgError::from(format!(
+                        "{:#08X} is out of range of memory.",
+                        address
+                    )));
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
+}
 
 /// Print the value at an absolute memory address.
 /// Parameters:

@@ -177,6 +177,10 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
             DebugCommandTypes::Break,
             Box::new(breakpoints::dbg_breakpoint) as DebugFn,
         ),
+        (
+            DebugCommandTypes::Print,
+            Box::new(misc::dbg_print) as DebugFn,
+        ),
     ])
 }
 
