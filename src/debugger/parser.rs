@@ -4,16 +4,6 @@ use crate::{emu::VirtualMachine, memory::MEMORY_END};
 
 use super::{DebuggerState, TokenSeparator};
 
-/// parser.rs
-/// # About this file
-/// This file contains the functionality for the debugger to parse arguments from the user into lists of tokens.
-/// The general flow is as follows:
-///     1. collect_args() takes a set of arguments as a list of strings which are split by spaces, and then encodes them as a list of their token types.
-///     2. collect_tags() takes a list of tokens and converts Value() to Tag() where an invalid numeric value is found.
-///     3. validate_tag_offsets() takes a list of tokens and converts Tag()s back into Value()s when they already exist.
-///     4. compute_address_from_args() takes a list of tokens, and computes the finalized address by calling apply_modifiers().
-///         * apply_modifiers() takes a list of tokens and applies all of the modifiers to values where necessary.
-
 /**************************************** Struct and Type definitions ***************************************************/
 
 /// Error to generate when a bad argument is passed to the debugger.
@@ -449,7 +439,6 @@ fn compute_address_from_args(
     let mut last_value: Option<String> = None;
     let mut operator_found: bool = true;
 
-    println!("Passed in was {:?}", args);
     let mut deref_args = args.clone();
     if args.contains_tag() {
         match validate_tags(deref_args, &debug) {
@@ -596,23 +585,19 @@ pub fn create_new_tag(
 ) -> Result<usize, InvalidDbgArgError> {
     let result: Result<usize, InvalidDbgArgError>;
 
-    println!("Input to create_new_tag was {:?}", input);
-
-    match validate_tags(input.to_vec(), debug) {
+    match validate_tags(collect_tags(input.to_vec()), debug) {
         Ok(mut tokens) => {
             if let Some(TokenSeparator::Tag(ref tagname)) = tokens.pop() {
                 // If the length of this is 0, then the parameter was just `tagname`.
                 // Make a tag at PC.
                 if tokens.len() == 0{
                     debug.tags.insert(tagname.to_string(), vm.cpu.get_pc());
-                    println!("Tag {} created at {:#08X}", tagname, vm.cpu.get_pc());
                     result = Ok(vm.cpu.get_pc());
                 }
                 else {
                     match compute_address_from_args(&tokens, debug, vm) {
                         Ok(value) => {
                             debug.tags.insert(tagname.to_string(), value);
-                            println!("Tag {} created at {:#08X}", tagname, value);
                             result = Ok(value);
                         }
                         Err(e) => {
@@ -626,7 +611,7 @@ pub fn create_new_tag(
             }
             else {
                 result = Err(InvalidDbgArgError::from(
-                    "Request to create a new tag was formatted incorrectly.",
+                    "Could not find new tag to create in stream.",
                 ));
             }
         }
@@ -685,92 +670,125 @@ pub fn str_to_values(
 /**************************************** Tests *************************************************************************/
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use rand::Rng;
     use std::iter::zip;
 
     /**************************************** Test Helpers **************************************************************/
 
-    mod testconst {
+    pub mod testconst {
         use super::*;
 
         pub const TEST_TAG_NAME: &str = "tagname";
         pub const TEST_TAG_NAME2: &str = "tagname2";
         pub const TEST_TAG_NAME3: &str = "tagname3";
-        pub const TEST_BASE_ADDR: &str = "808000";
-        pub const TEST_DECIMAL_VALUE: &str = "50";
-        pub const _TEST_DECIMAL_VALUE_AS_HEX: &str = "32";
-        pub const TEST_HEX_VALUE: &str = "0A";
+        pub const TEST_BASE_ADDR_STR: &str = "808000";
+        pub const TEST_BASE_ADDR: usize = 0x808000;
+        pub const TEST_DECIMAL_VALUE_STR: &str = "50";
+        pub const _TEST_DECIMAL_VALUE: usize = 50;
+        pub const _TEST_DECIMAL_VALUE_STR_AS_HEX: &str = "32";
         pub const TEST_WIDE_HEX_VALUE: &str = "00000A";
+        pub const TEST_HEX_VALUE_STR: &str = "0A";
+        pub const TEST_HEX_VALUE: usize = 0x0A;
 
         /// Test results for the outcome of each of the tests performed.
 
         /// The representation of the arguments passed as a vector of strings.
 
+        /// Test cases which are driven purely by numeric literals, represented as string vectors.
+        pub fn literal_string_args() -> Vec<Vec<&'static str>> {
+            vec![
+                vec!["$808000"],
+                vec!["$808000", "+", "$0A"],
+                vec!["$808000", "+", TEST_DECIMAL_VALUE_STR],
+                vec!["+", "$0A"],
+                vec!["+", TEST_DECIMAL_VALUE_STR],
+                vec![TEST_DECIMAL_VALUE_STR],
+                vec!["$50"],
+                vec![TEST_DECIMAL_VALUE_STR, "+", "$0A"],
+                vec![TEST_DECIMAL_VALUE_STR, "+", TEST_DECIMAL_VALUE_STR],
+            ]
+        }
+
         /// Test cases which are driven purely by numeric literals.
-        pub fn token_literal_test_cases() -> Vec<DebugTokenStream> {
+        pub fn literal_token_args() -> Vec<DebugTokenStream> {
             vec![
                 // $808000
                 // Hex Literal
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // $808000+$0A
                 // Hex Literal + Hex Offset
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                 ],
                 // $808000+50
                 // Hex Literal + Decimal Offset
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // +$0A
                 // PC + Hex Offset
                 vec![
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                 ],
                 // +50
                 // PC + Decimal Offset
                 vec![
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // 50
                 // Decimal Literal
-                vec![TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE))],
+                vec![TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR))],
                 // $50
                 // Hex Literal (Duplicate, to cover +50, 50, $50 and see all return diff)
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // 50+$0A
                 // Decimal Literal + Hex Offset
                 vec![
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                 ],
                 // 50 + 50
                 // Decimal Literal + Decimal Offset
                 vec![
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
+            ]
+        }
+
+        /// Results of test cases driven by numeric literals.
+        pub fn literal_numeric_results() -> Vec<usize> {
+            vec![
+                0x808000, // $808000
+                0x80800A, // $808000+$0A
+                0x808032, // $808000+50
+                0x80800A, // +$0A
+                0x808032, // +50
+                0x000032, // 50
+                0x000050, // $50
+                0x00003C, // 50+$0A
+                0x000064, // 50+50
             ]
         }
 
@@ -779,20 +797,20 @@ mod tests {
             let vec = vec![
                 /****** Tag before value ******/
                 vec![TEST_TAG_NAME, "$808000"],
-                vec![TEST_TAG_NAME, TEST_DECIMAL_VALUE],
+                vec![TEST_TAG_NAME, TEST_DECIMAL_VALUE_STR],
                 vec![TEST_TAG_NAME, "$808000", "+", "$0A"],
-                vec![TEST_TAG_NAME, "$808000", "+", TEST_DECIMAL_VALUE],
+                vec![TEST_TAG_NAME, "$808000", "+", TEST_DECIMAL_VALUE_STR],
                 vec![TEST_TAG_NAME, "+", "$0A"],
-                vec![TEST_TAG_NAME, "+", TEST_DECIMAL_VALUE],
+                vec![TEST_TAG_NAME, "+", TEST_DECIMAL_VALUE_STR],
                 /****** Value before tag ******/
                 vec!["$808000", TEST_TAG_NAME],
-                vec![TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                vec![TEST_DECIMAL_VALUE_STR, TEST_TAG_NAME],
                 vec!["$808000", "+", "$0A", TEST_TAG_NAME],
-                vec!["$808000", "+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                vec!["$808000", "+", TEST_DECIMAL_VALUE_STR, TEST_TAG_NAME],
                 vec!["$0A", "+", TEST_TAG_NAME],
-                vec![TEST_DECIMAL_VALUE, "+", TEST_TAG_NAME],
+                vec![TEST_DECIMAL_VALUE_STR, "+", TEST_TAG_NAME],
                 vec!["+", "$0A", TEST_TAG_NAME],
-                vec!["+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                vec!["+", TEST_DECIMAL_VALUE_STR, TEST_TAG_NAME],
                 /****** Other Combinations ******/
                 vec![TEST_TAG_NAME],
                 vec![TEST_TAG_NAME, "+", TEST_TAG_NAME],
@@ -811,82 +829,82 @@ mod tests {
                 vec![
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // tag 50
                 vec![
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // tag $808000 + $0A
                 vec![
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                 ],
                 // tag $808000 + 50
                 vec![
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // tag +$0A
                 vec![
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                 ],
                 // tag +50
                 vec![
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 /****** Value before tag ******/
                 // $808000 tag
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                 ],
                 // 50 tag
                 vec![
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                 ],
                 // $808000 + $0A tag
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                 ],
                 // $808000 + 50 tag
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                 ],
                 // $0A + tag
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                 ],
                 // 50 + tag
                 vec![
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                 ],
@@ -894,13 +912,13 @@ mod tests {
                 vec![
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                 ],
                 // +50 tag
                 vec![
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Value(String::from(TEST_TAG_NAME)),
                 ],
                 /****** Other tag configurations ******/
@@ -944,32 +962,32 @@ mod tests {
                 vec![
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // tag 50
                 // Tag followed by decimal literal
                 vec![
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // tag $808000 + $0A
                 // Tag, as specified by a hex literal + hex offset
                 vec![
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                 ],
                 // tag $808000 + 50
                 // Tag, as specified by a hex literal + decimal offset
                 vec![
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // tag + $0A
                 // Tag with Hex Offset (Tag should exist prior)
@@ -977,60 +995,60 @@ mod tests {
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                 ],
                 // tag + 50
                 // Tag with Decimal Offset (Tag should exist prior)
                 vec![
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 /******* Value before Tag *******/
                 // $808000 tag
                 // Hex literal followed by tag
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // 50 tag
                 // Decimal literal followed by tag
                 vec![
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // $808000 + $0A tag
                 // tag, as defined as Hex literal + Hex offset
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // $808000 + 50 tag
                 // tag, as defined as Hex Literal + Decimal Offset
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // $0A + tag
                 // Hex literal offset by tag (Tag should exist prior)
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // 50 + tag
                 // Decimal literal with tag offset (Tag should exist prior)
                 vec![
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
@@ -1039,14 +1057,14 @@ mod tests {
                 vec![
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // +50 tag
                 // tag as decimal offset from PC
                 vec![
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 /******* Other Tag Cases *******/
@@ -1094,148 +1112,148 @@ mod tests {
                 // Tag followed by Hex Literal
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // tag 50
                 // Tag followed by decimal literal
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // tag $808000 + $0A
                 // Tag, as specified by a hex literal + hex offset
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                 ],
                 // tag $808000 + 50
                 // Tag, as specified by a hex literal + decimal offset
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // tag + $0A
                 // Tag with Hex Offset (Tag should exist prior)
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                 ],
                 // tag + 50
                 // Tag with Decimal Offset (Tag should exist prior)
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 /******* Value before Tag *******/
                 // $808000 tag
                 // Hex literal followed by tag
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // 50 tag
                 // Decimal literal followed by tag
                 vec![
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // $808000 + $0A tag
                 // tag, as defined as Hex literal + Hex offset
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // $808000 + 50 tag
                 // tag, as defined as Hex Literal + Decimal Offset
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // $0A + tag
                 // Hex literal offset by tag (Tag should exist prior)
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // 50 + tag
                 // Decimal literal with tag offset (Tag should exist prior)
                 vec![
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // +$0A tag
                 // tag as Hex offset from PC
                 vec![
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_HEX_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // +50 tag
                 // tag as decimal offset from PC
                 vec![
                     TokenSeparator::Offset,
-                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE)),
+                    TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 /******* Other Tag Cases *******/
                 // tag
                 // Just a tag name
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // tag + tag
                 // Adding a tag value to itself (should exist prior)
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // tag + tag2
                 // 2 tag values (both should exist prior)
                 // Hex tag values will always be widened to a 6-digit hex value.
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_WIDE_HEX_VALUE)),
@@ -1244,7 +1262,7 @@ mod tests {
                 // 2 tag values (both should exist prior) equate to one new tag.
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_WIDE_HEX_VALUE)),
@@ -1254,7 +1272,7 @@ mod tests {
                 // 2 tag values (both should exist prior) equate to one new tag.
                 vec![
                     TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR)),
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_WIDE_HEX_VALUE)),
@@ -1262,6 +1280,7 @@ mod tests {
                 ],
             ]
         }
+    
     }
 
     /**************************************** Unit Test Implementations *************************************************/
@@ -1272,18 +1291,8 @@ mod tests {
 
         #[test]
         fn test_collect_args() {
-            let string_vectors: Vec<Vec<&str>> = vec![
-                vec!["$808000"],
-                vec!["$808000", "+", "$0A"],
-                vec!["$808000", "+", TEST_DECIMAL_VALUE],
-                vec!["+", "$0A"],
-                vec!["+", TEST_DECIMAL_VALUE],
-                vec![TEST_DECIMAL_VALUE],
-                vec!["$50"],
-                vec![TEST_DECIMAL_VALUE, "+", "$0A"],
-                vec![TEST_DECIMAL_VALUE, "+", TEST_DECIMAL_VALUE],
-            ];
-            let token_vectors = token_literal_test_cases();
+            let string_vectors = literal_string_args();
+            let token_vectors = literal_token_args();
 
             for (test_input, expected_result) in zip(string_vectors, token_vectors) {
                 assert_eq!(expected_result, collect_args(test_input).unwrap());
@@ -1294,18 +1303,8 @@ mod tests {
         fn test_compute_address_from_args() {
             let test_debug = DebuggerState::new();
             let test_vm = VirtualMachine::new();
-            let numeric_result_vector: Vec<usize> = vec![
-                0x808000, // $808000
-                0x80800A, // $808000+$0A
-                0x808032, // $808000+50
-                0x80800A, // +$0A
-                0x808032, // +50
-                0x000032, // 50
-                0x000050, // $50
-                0x00003C, // 50+$0A
-                0x000064, // 50+50
-            ];
-            let token_vectors = token_literal_test_cases();
+            let numeric_result_vector = literal_numeric_results();
+            let token_vectors = literal_token_args();
 
             for (test_input, expected_result) in zip(token_vectors, numeric_result_vector) {
                 let test_result =
@@ -1322,18 +1321,8 @@ mod tests {
         fn test_apply_modifiers() {
             let test_debug = DebuggerState::new();
             let test_vm = VirtualMachine::new();
-            let token_vectors = token_literal_test_cases();
-            let numeric_result_vector: Vec<usize> = vec![
-                0x808000, // $808000
-                0x80800A, // $808000+$0A
-                0x808032, // $808000+50
-                0x80800A, // +$0A
-                0x808032, // +50
-                0x000032, // 50
-                0x000050, // $50
-                0x00003C, // 50+$0A
-                0x000064, // 50+50
-            ];
+            let token_vectors = literal_token_args();
+            let numeric_result_vector = literal_numeric_results();
 
             for (test_input, expected_result) in zip(token_vectors, numeric_result_vector) {
                 let test_result =
@@ -1380,10 +1369,10 @@ mod tests {
             let mut test_debugger = DebuggerState::new();
             test_debugger
                 .tags
-                .insert(String::from(TEST_TAG_NAME), 0x808000);
+                .insert(String::from(TEST_TAG_NAME), TEST_BASE_ADDR);
             test_debugger
                 .tags
-                .insert(String::from(TEST_TAG_NAME2), 0x0A);
+                .insert(String::from(TEST_TAG_NAME2), TEST_HEX_VALUE);
             let test_tag_tokens = token_tag_as_tags();
             let test_deref_tokens = token_tag_as_deref();
 
@@ -1443,8 +1432,8 @@ mod tests {
             let mut debug = DebuggerState::new();
             let vm = VirtualMachine::new();
 
-            debug.tags.insert(TEST_TAG_NAME.to_string(), 0x808000);
-            debug.tags.insert(TEST_TAG_NAME2.to_string(), 0x0A);
+            debug.tags.insert(TEST_TAG_NAME.to_string(), TEST_BASE_ADDR);
+            debug.tags.insert(TEST_TAG_NAME2.to_string(), TEST_HEX_VALUE);
 
             let test_tag_tokens = token_tag_as_tags();
 
@@ -1502,20 +1491,20 @@ mod tests {
             let value_result: Vec<Option<(Option<Vec<String>>, usize)>> = vec![
                 /****** Tag before value ******/
                 None,//vec![TEST_TAG_NAME, "$808000"],
-                None,//vec![TEST_TAG_NAME, TEST_DECIMAL_VALUE],
+                None,//vec![TEST_TAG_NAME, TEST_DECIMAL_VALUE_STR],
                 None,//vec![TEST_TAG_NAME, "$808000", "+", "$0A"],
-                None,//vec![TEST_TAG_NAME, "$808000", "+", TEST_DECIMAL_VALUE],
+                None,//vec![TEST_TAG_NAME, "$808000", "+", TEST_DECIMAL_VALUE_STR],
                 Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x80800A)),//vec![TEST_TAG_NAME, "+", "$0A"],
-                Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x808032)),//vec![TEST_TAG_NAME, "+", TEST_DECIMAL_VALUE],
+                Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x808032)),//vec![TEST_TAG_NAME, "+", TEST_DECIMAL_VALUE_STR],
                 /****** Value before tag ******/
                 None,//vec!["$808000", TEST_TAG_NAME],
-                None,//vec![TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                None,//vec![TEST_DECIMAL_VALUE_STR, TEST_TAG_NAME],
                 None,//vec!["$808000", "+", "$0A", TEST_TAG_NAME],
-                None,//vec!["$808000", "+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                None,//vec!["$808000", "+", TEST_DECIMAL_VALUE_STR, TEST_TAG_NAME],
                 Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x80800A)),//vec!["$0A", "+", TEST_TAG_NAME],
-                Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x808032)),//vec![TEST_DECIMAL_VALUE, "+", TEST_TAG_NAME],
+                Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x808032)),//vec![TEST_DECIMAL_VALUE_STR, "+", TEST_TAG_NAME],
                 None,//vec!["+", "$0A", TEST_TAG_NAME],
-                None,//vec!["+", TEST_DECIMAL_VALUE, TEST_TAG_NAME],
+                None,//vec!["+", TEST_DECIMAL_VALUE_STR, TEST_TAG_NAME],
                 /****** Other Combinations ******/
                 Some((Some(vec![TEST_TAG_NAME.to_string()]), 0x808000)),//vec![TEST_TAG_NAME],
                 None,//vec![TEST_TAG_NAME, "+", TEST_TAG_NAME],
@@ -1527,9 +1516,9 @@ mod tests {
             let mut test_debug = DebuggerState::new();
             let test_vm = VirtualMachine::new();
 
-            test_debug.tags.insert(TEST_TAG_NAME.to_string(), 0x808000);
-            test_debug.tags.insert(TEST_TAG_NAME2.to_string(), 0x0A);
-            test_debug.tags.insert(TEST_TAG_NAME3.to_string(), 0x80800A);
+            test_debug.tags.insert(TEST_TAG_NAME.to_string(), TEST_BASE_ADDR);
+            test_debug.tags.insert(TEST_TAG_NAME2.to_string(), TEST_HEX_VALUE);
+            test_debug.tags.insert(TEST_TAG_NAME3.to_string(), TEST_BASE_ADDR + TEST_HEX_VALUE);
 
             for (test_input, expected_result) in zip(string_vectors, value_result) {
                 if let Some(result) = expected_result{
@@ -1572,8 +1561,8 @@ mod tests {
             let mut test_debug = DebuggerState::new();
             let test_vm = VirtualMachine::new();
 
-            test_debug.tags.insert(TEST_TAG_NAME.to_string(), 0x808000);
-            test_debug.tags.insert(TEST_TAG_NAME2.to_string(), 0x0A);
+            test_debug.tags.insert(TEST_TAG_NAME.to_string(), TEST_BASE_ADDR);
+            test_debug.tags.insert(TEST_TAG_NAME2.to_string(), TEST_HEX_VALUE);
 
             for(test_input, expected_result) in zip(token_vectors, numeric_results){
                 if let Some(result) = expected_result{

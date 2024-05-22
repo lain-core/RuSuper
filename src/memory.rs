@@ -2,7 +2,7 @@ use crate::romdata;
 use core::fmt;
 
 /**************************************** Constant Values ***************************************************************/
-const MEMORY_SIZE: usize = (0xFFFFFF) + 1;
+pub const MEMORY_SIZE: usize = (0xFFFFFF) + 1;
 pub const MEMORY_START: usize = 0x000000;
 pub const MEMORY_END: usize = 0xFFFFFF;
 pub const _MEMORY_BANK_COUNT: usize = 0xFF; // Number of addressable memory banks.

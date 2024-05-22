@@ -41,6 +41,7 @@ pub fn dbg_continue(
     Ok(())
 }
 
+/// Print the value that is stored in a tag or address.
 pub fn dbg_print(
     args: Vec<&str>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
 ) -> Result<(), InvalidDbgArgError> {
@@ -66,37 +67,26 @@ pub fn dbg_print(
     Ok(())
 }
 
-/// Print the value at an absolute memory address.
-/// Parameters:
-///     - `address`:    Address to read from.
-///     - `_debug`:     Debugger State, unused.
-///     - `vm`:         Virtual Machine containing memory to read from.
-fn _dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
-    let byte_value = vm.memory.get_byte(address);
-    let word_value = vm.memory.get_word(address);
-
-    if byte_value.is_ok() {
-        print!(
-            "{:#08X}: {:#04X} ",
-            address,
-            byte_value.expect("Value was error despite checking")
-        );
-    }
-    else {
-        print!("Byte Value: Invalid ")
-    }
-
-    if word_value.is_ok() {
-        print!(
-            "Word Value: {:#04X} ",
-            word_value.expect("Word value was error despite checking")
-        );
-    }
-    else {
-        print!("Word Value: Invalid");
-    }
-
-    print!("\n");
-}
-
 /**************************************** Tests *************************************************************************/
+
+//TODO:
+// mod tests{
+//     use rand::RngCore;
+
+//     use crate::{debugger::DebuggerState, memory::MEMORY_SIZE};
+
+//     use super::*;
+
+//     #[test]
+//     fn test_dbg_print() {
+
+//         let mut test_debug = DebuggerState::new();
+//         let mut test_vm = VirtualMachine::new();
+//         let mut random_data: Box<[u8; MEMORY_SIZE]> =
+//             vec![0 as u8; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
+//         rand::thread_rng().fill_bytes(&mut *random_data);
+//         for (index, byte) in random_data.iter().enumerate() {
+//             test_vm.memory.put_byte(index, *byte).unwrap();
+//         }
+//     }
+// }
