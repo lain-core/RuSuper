@@ -205,10 +205,25 @@ mod tests {
             }
         }
 
-        // #[test]
-        // fn test_dbg_breakpoint_delete() {
+        #[test]
+        fn test_dbg_breakpoint_delete() {
+            let test_inputs = testconst::literal_string_args();
+            let expected_numerics = testconst::literal_numeric_results();
 
-        // }
+            let mut test_debug = DebuggerState::new();
+            let mut test_vm = VirtualMachine::new();
+
+            for (test_input, expected_result) in zip(test_inputs, expected_numerics) {
+                assert_eq!(
+                    (),
+                    BreakpointSubCommandTypes::Set
+                        .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
+                        .unwrap()
+                );
+                test_debug.breakpoints.remove_value(expected_result);
+                assert!(!test_debug.breakpoints.contains(&expected_result));
+            }
+        }
     }
 
     mod breakpoint_tag_tests {
@@ -218,7 +233,7 @@ mod tests {
             TEST_BASE_ADDR, TEST_HEX_VALUE, TEST_TAG_NAME, TEST_TAG_NAME2,
         };
 
-        use self::breakpoints::parser::tests::testconst;
+        use self::breakpoints::parser::tests::testconst::{self, tag_string_args};
 
         use super::*;
         #[test]
@@ -327,10 +342,50 @@ mod tests {
             }
         }
 
-        // #[test]
-        // fn test_dbg_breakpoint_delete() {
+        #[test]
+        fn test_dbg_breakpoint_delete() {
+            let string_vectors = tag_string_args();
+            let numeric_results: Vec<Option<usize>> = vec![
+                Some(0x808000), // tag $808000
+                Some(50),       // tag 50
+                Some(0x80800A), // tag $808000 + $0A
+                Some(0x808032), // tag $808000 + 50
+                None,           // tag +$0A
+                None,           // tag +50
+                /* Value before tag */
+                Some(0x808000), // $808000 tag
+                Some(50),       // 50 tag
+                Some(0x80800A), // $808000 + $0A tag
+                Some(0x808032), // $808000 + 50 tag
+                None,           // will fail  // $0A + tag
+                None,           // will fail  // 50 + tag
+                Some(0x80800A), // +$0A tag
+                Some(0x808032), // +50 tag
+                /* Other */
+                Some(0x808000), // tag
+                None,           // will fail, // tag + tag
+                None,           // will fail, // tag + tag2
+                None,           // will fail, // tag + tag2 tag3
+                None,           // will fail  // tag3 tag + tag2
+            ];
 
-        // }
+            let mut test_debug = DebuggerState::new();
+            let mut test_vm = VirtualMachine::new();
+
+            for (_test_input, expected_result) in zip(string_vectors, numeric_results) {
+                if let Some(result) = expected_result {
+                    test_debug.breakpoints.push(result);
+                    test_debug.tags.insert(TEST_TAG_NAME.to_string(), result);
+                    assert!(test_debug.breakpoints.contains(&result));
+                    assert_eq!(test_debug.tags.get(TEST_TAG_NAME).unwrap(), &result);
+                    BreakpointSubCommandTypes::Delete
+                        .breakpoint_op(&[TEST_TAG_NAME], &mut test_debug, &mut test_vm)
+                        .unwrap();
+                    assert!(!test_debug.breakpoints.contains(&result));
+                    assert_eq!(test_debug.tags.get(TEST_TAG_NAME), None)
+                }
+            }
+        }
     }
 
     // #[test]
