@@ -1,5 +1,4 @@
 use super::{parser::*, *};
-use std::collections::HashMap;
 
 /**************************************** Struct and Type definitions ***************************************************/
 trait BreakpointFn {
@@ -114,7 +113,7 @@ impl BreakpointFn for SetOp {
 
 impl BreakpointFn for ListOp {
     fn breakpoint_op(
-        &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
+        &self, _args: &[&str], debug: &mut DebuggerState, _vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
         print!("\n");
         println!("  Address  | Tag Name  ");

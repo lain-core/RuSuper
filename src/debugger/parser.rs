@@ -594,13 +594,13 @@ pub fn create_new_tag(
                 // If the length of this is 0, then the parameter was just `tagname`.
                 // Make a tag at PC.
                 if tokens.len() == 0 {
-                    debug.tags.insert(tagname.to_string(), vm.cpu.get_pc());
+                    debug.tags.insert((*tagname).clone(), vm.cpu.get_pc());
                     result = Ok(vm.cpu.get_pc());
                 }
                 else {
                     match compute_address_from_args(&tokens, debug, vm) {
                         Ok(value) => {
-                            debug.tags.insert(tagname.to_string(), value);
+                            debug.tags.insert((*tagname).clone(), value);
                             result = Ok(value);
                         }
                         Err(e) => {
@@ -666,7 +666,7 @@ pub fn str_to_values(
         }
     }
 
-    return cmd_res;
+    cmd_res
 }
 
 /**************************************** Tests *************************************************************************/

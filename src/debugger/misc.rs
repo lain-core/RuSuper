@@ -11,7 +11,7 @@ use std::process::exit;
 
 impl DebugFn for ExitCommand {
     fn debug_op(
-        &self, args: &[&str], debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
+        &self, _args: &[&str], _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
         exit(0);
     }

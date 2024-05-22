@@ -12,43 +12,16 @@ use std::{
 use self::parser::InvalidDbgArgError;
 /**************************************** Struct and Type definitions ***************************************************/
 
-pub type DebugTagTable = HashMap<String, usize>;
-
-/// Struct to track the operation of the debugger.
-/// is_stepping: if the debugger is running,
-/// steps_to_run: steps until next break,
-/// breakpoints: list of breakpoint addresses to stop at,
-/// watched_vars: variables being watched,
-/// tags:   hashmap of tagged addresses as a HashMap<tag_name, tag_address>.
-struct DebuggerState {
-    pub is_stepping: bool,
-    pub steps_to_run: usize,
-    breakpoints: Vec<usize>,
-    _watched_vars: Vec<usize>,
-    tags: DebugTagTable,
-}
-
-impl DebuggerState {
-    pub fn new() -> Self {
-        Self {
-            is_stepping: false,
-            steps_to_run: 0,
-            _watched_vars: Vec::new(),
-            breakpoints: Vec::new(),
-            tags: HashMap::new(),
-        }
-    }
-}
-
 pub trait FindKeyInHashMap {
-    fn find_key(&self, value: usize) -> Option<&String>;
+    fn find_key(&self, value: usize) -> Option<&str>;
 }
 
 impl FindKeyInHashMap for DebugTagTable {
-    fn find_key(&self, value: usize) -> Option<&String> {
-        self.iter().find_map(|(ref key, val)| {
+    /// Given a value, find the first key that matches in a hashmap.
+    fn find_key(&self, value: usize) -> Option<&str> {
+        self.iter().find_map(|(key, val)| {
             if *val == value {
-                Some(*key)
+                Some(key.as_str())
             }
             else {
                 None
@@ -79,6 +52,35 @@ impl<T: Eq> RemoveValueFromVector<T> for Vec<T> {
             for index in del_index {
                 self.remove(index);
             }
+        }
+    }
+}
+
+
+pub type DebugTagTable = HashMap<String, usize>;
+
+/// Struct to track the operation of the debugger.
+/// is_stepping: if the debugger is running,
+/// steps_to_run: steps until next break,
+/// breakpoints: list of breakpoint addresses to stop at,
+/// watched_vars: variables being watched,
+/// tags:   hashmap of tagged addresses as a HashMap<tag_name, tag_address>.
+struct DebuggerState {
+    pub is_stepping: bool,
+    pub steps_to_run: usize,
+    breakpoints: Vec<usize>,
+    _watched_vars: Vec<usize>,
+    tags: DebugTagTable,
+}
+
+impl DebuggerState {
+    pub fn new() -> Self {
+        Self {
+            is_stepping: false,
+            steps_to_run: 0,
+            _watched_vars: Vec::new(),
+            breakpoints: Vec::new(),
+            tags: HashMap::new(),
         }
     }
 }
@@ -142,9 +144,27 @@ struct PrintCommand;
 struct ExitCommand;
 struct InvalidCommand;
 struct BreakCommand;
-struct StepCommand;
-struct DumpCommand;
-struct WatchCommand;
+struct _StepCommand;
+struct _DumpCommand;
+struct _WatchCommand;
+
+impl DebugFn for DebugCommandTypes {
+    fn debug_op(
+        &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
+    ) -> Result<(), InvalidDbgArgError> {
+        match self {
+            DebugCommandTypes::Help => HelpCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Break => BreakCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Continue => ContinueCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Step => todo!(),
+            DebugCommandTypes::Dump => todo!(),
+            DebugCommandTypes::Print => PrintCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Watch => todo!(),
+            DebugCommandTypes::Exit => ExitCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Invalid => InvalidCommand.debug_op(args, debug, vm),
+        }
+    }
+}
 
 /// Parseable tokens in debugger inputs.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -169,24 +189,6 @@ impl From<&str> for TokenSeparator {
 }
 
 /**************************************** File Scope Functions **********************************************************/
-
-impl DebugFn for DebugCommandTypes {
-    fn debug_op(
-        &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
-    ) -> Result<(), InvalidDbgArgError> {
-        match self {
-            DebugCommandTypes::Help => HelpCommand.debug_op(args, debug, vm),
-            DebugCommandTypes::Break => BreakCommand.debug_op(args, debug, vm),
-            DebugCommandTypes::Continue => ContinueCommand.debug_op(args, debug, vm),
-            DebugCommandTypes::Step => todo!(),
-            DebugCommandTypes::Dump => todo!(),
-            DebugCommandTypes::Print => PrintCommand.debug_op(args, debug, vm),
-            DebugCommandTypes::Watch => todo!(),
-            DebugCommandTypes::Exit => ExitCommand.debug_op(args, debug, vm),
-            DebugCommandTypes::Invalid => InvalidCommand.debug_op(args, debug, vm),
-        }
-    }
-}
 
 /// Parse the input from the debugger, decode the command, and then call it's associated function.
 /// Parameters:
@@ -221,7 +223,13 @@ pub fn run(mut vm: VirtualMachine) {
     loop {
         // If the VM is running normally, just continue as usual.
         if vm.is_running && !debugger.is_stepping {
-            vm.is_running = emu::step_cpu(&mut vm);
+            if debugger.breakpoints.contains(&vm.cpu.get_pc()) {
+                vm.is_running = false;
+                println!("BREAK: Halted at {:#08X}", &vm.cpu.get_pc());
+            }
+            else {
+                vm.is_running = emu::step_cpu(&mut vm);
+            }
         }
         // If the debugger is running the VM by stepping for N steps, check for how many steps are remaining.
         else if debugger.is_stepping {
