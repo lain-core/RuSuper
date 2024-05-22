@@ -83,8 +83,14 @@ impl<T: Eq> RemoveValueFromVector<T> for Vec<T> {
     }
 }
 
+trait DebugFn {
+    fn debug_op(
+        &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
+    ) -> Result<(), InvalidDbgArgError>;
+}
+
 /// Enum representing all of the potential commands for the debugger.
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 enum DebugCommandTypes {
     Help,
     Break,
@@ -130,6 +136,16 @@ impl From<&str> for DebugCommandTypes {
     }
 }
 
+struct HelpCommand;
+struct ContinueCommand;
+struct PrintCommand;
+struct ExitCommand;
+struct InvalidCommand;
+struct BreakCommand;
+struct StepCommand;
+struct DumpCommand;
+struct WatchCommand;
+
 /// Parseable tokens in debugger inputs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum TokenSeparator {
@@ -152,36 +168,24 @@ impl From<&str> for TokenSeparator {
     }
 }
 
-type DebugFn = Box<
-    dyn Fn(Vec<&str>, &mut DebuggerState, &mut VirtualMachine) -> Result<(), InvalidDbgArgError>,
->;
-
 /**************************************** File Scope Functions **********************************************************/
 
-/// Construct the hash map of debugger commands.
-/// Returns:
-///     - HashMap<DebugCommandTypes, DebugFn>:  The mapping of enums to their function pointer.
-fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
-    HashMap::from([
-        (DebugCommandTypes::Help, Box::new(misc::dbg_help) as DebugFn),
-        (
-            DebugCommandTypes::Continue,
-            Box::new(misc::dbg_continue) as DebugFn,
-        ),
-        (
-            DebugCommandTypes::Invalid,
-            Box::new(misc::dbg_invalid) as DebugFn,
-        ),
-        (DebugCommandTypes::Exit, Box::new(misc::dbg_exit) as DebugFn),
-        (
-            DebugCommandTypes::Break,
-            Box::new(breakpoints::dbg_breakpoint) as DebugFn,
-        ),
-        (
-            DebugCommandTypes::Print,
-            Box::new(misc::dbg_print) as DebugFn,
-        ),
-    ])
+impl DebugFn for DebugCommandTypes {
+    fn debug_op(
+        &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
+    ) -> Result<(), InvalidDbgArgError> {
+        match self {
+            DebugCommandTypes::Help => HelpCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Break => BreakCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Continue => ContinueCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Step => todo!(),
+            DebugCommandTypes::Dump => todo!(),
+            DebugCommandTypes::Print => PrintCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Watch => todo!(),
+            DebugCommandTypes::Exit => ExitCommand.debug_op(args, debug, vm),
+            DebugCommandTypes::Invalid => InvalidCommand.debug_op(args, debug, vm),
+        }
+    }
 }
 
 /// Parse the input from the debugger, decode the command, and then call it's associated function.
@@ -189,23 +193,17 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
 ///     - `debug`:      Mutable pointer to the debugger state to utilize,
 ///     - `vm`:         Pointer to the virtual machine to fetch values from memory or PC.
 ///     - `debug_cmds`: The assembled table of debugger command->fn pointers.
-fn check_dbg_input(
-    debug: &mut DebuggerState, vm: &mut VirtualMachine,
-    debug_cmds: &HashMap<DebugCommandTypes, DebugFn>,
-) {
+fn check_dbg_input(debug: &mut DebuggerState, vm: &mut VirtualMachine) {
     let mut input_text = String::new();
     io::stdin()
         .read_line(&mut input_text)
         .expect("Failed to read stdin");
+    input_text = input_text.to_lowercase();
     let trimmed: Vec<&str> = input_text.trim().split_whitespace().collect();
 
     if trimmed.len() > 0 {
-        let command: DebugCommandTypes =
-            DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
-
-        // Call the debugger function.
-        if let Err(err_msg) = debug_cmds[&command](trimmed[1..].to_vec(), debug, vm) {
-            println!("{}", err_msg);
+        if let Err(error) = DebugCommandTypes::from(trimmed[0]).debug_op(&trimmed[1..], debug, vm) {
+            println!("{}", error);
         }
     }
 }
@@ -220,7 +218,6 @@ pub fn run(mut vm: VirtualMachine) {
     let mut debugger = DebuggerState::new();
 
     // Instantiate the table of debugger commands before starting the loop, so we don't churn a ton of memory.
-    let debug_cmds: HashMap<DebugCommandTypes, DebugFn> = construct_cmd_table();
     loop {
         // If the VM is running normally, just continue as usual.
         if vm.is_running && !debugger.is_stepping {
@@ -241,7 +238,7 @@ pub fn run(mut vm: VirtualMachine) {
         else {
             print!(">> ");
             io::stdout().flush().unwrap();
-            check_dbg_input(&mut debugger, &mut vm, &debug_cmds);
+            check_dbg_input(&mut debugger, &mut vm);
         }
     }
 }
