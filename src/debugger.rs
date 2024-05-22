@@ -9,7 +9,7 @@ use std::{
     io::{self, Write},
 };
 
-use self::parser::{str_to_args, DebugTokenStream, InvalidDbgArgError};
+use self::parser::InvalidDbgArgError;
 /**************************************** Struct and Type definitions ***************************************************/
 
 pub type DebugTagTable = HashMap<String, usize>;
@@ -36,6 +36,49 @@ impl DebuggerState {
             _watched_vars: Vec::new(),
             breakpoints: Vec::new(),
             tags: HashMap::new(),
+        }
+    }
+}
+
+pub trait FindKeyInHashMap {
+    fn find_key(&self, value: usize) -> Option<&String>;
+}
+
+impl FindKeyInHashMap for DebugTagTable {
+    fn find_key(&self, value: usize) -> Option<&String> {
+        self.iter().find_map(|(ref key, val)| {
+            if *val == value {
+                Some(*key)
+            }
+            else {
+                None
+            }
+        })
+    }
+}
+
+/// Allow deleting a value from any Vector of Equatable value <T>.
+pub trait RemoveValueFromVector<T: Eq> {
+    fn remove_value(&mut self, value: T);
+}
+
+impl<T: Eq> RemoveValueFromVector<T> for Vec<T> {
+    /// Delete value from vector wherever found.
+    /// # Parameters:
+    ///     - `self`: Vector of type T
+    ///     - `value`: Value of type T to scan for.
+    fn remove_value(&mut self, value: T) {
+        let mut del_index: Vec<usize> = vec![];
+        for (index, item) in self.into_iter().enumerate() {
+            if *item == value {
+                del_index.push(index);
+            }
+        }
+
+        if del_index.len() > 0 {
+            for index in del_index {
+                self.remove(index);
+            }
         }
     }
 }
@@ -109,7 +152,9 @@ impl From<&str> for TokenSeparator {
     }
 }
 
-type DebugFn = Box<dyn Fn(DebugTokenStream, &mut DebuggerState, &mut VirtualMachine)>;
+type DebugFn = Box<
+    dyn Fn(Vec<&str>, &mut DebuggerState, &mut VirtualMachine) -> Result<(), InvalidDbgArgError>,
+>;
 
 /**************************************** File Scope Functions **********************************************************/
 
@@ -132,6 +177,10 @@ fn construct_cmd_table() -> HashMap<DebugCommandTypes, DebugFn> {
             DebugCommandTypes::Break,
             Box::new(breakpoints::dbg_breakpoint) as DebugFn,
         ),
+        (
+            DebugCommandTypes::Print,
+            Box::new(misc::dbg_print) as DebugFn,
+        ),
     ])
 }
 
@@ -153,22 +202,15 @@ fn check_dbg_input(
     if trimmed.len() > 0 {
         let command: DebugCommandTypes =
             DebugCommandTypes::from(trimmed[0].to_lowercase().as_ref());
-        let mut arguments: Result<DebugTokenStream, InvalidDbgArgError> = Ok(vec![]);
-        if trimmed.len() > 1 {
-            arguments = str_to_args(trimmed[1..].to_vec(), &debug);
-        }
 
         // Call the debugger function.
-        match arguments {
-            Ok(arguments) => { 
-                debug_cmds[&command](arguments, debug, vm);
-            }
-            Err(e) => {
-                println!("{}", e);
-            }
+        if let Err(err_msg) = debug_cmds[&command](trimmed[1..].to_vec(), debug, vm) {
+            println!("{}", err_msg);
         }
     }
 }
+
+/**************************************** Public Functions **************************************************************/
 
 /// Run the debugger.
 /// Runs until `exit` command is received.

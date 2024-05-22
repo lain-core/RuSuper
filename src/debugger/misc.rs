@@ -1,4 +1,7 @@
-use super::{TokenSeparator, VirtualMachine};
+use super::{
+    parser::{str_to_values, InvalidDbgArgError},
+    VirtualMachine,
+};
 use std::process::exit;
 
 /**************************************** Constant Values ***************************************************************/
@@ -6,14 +9,14 @@ use std::process::exit;
 /**************************************** File Scope Functions **********************************************************/
 /// Exits the program.
 pub fn dbg_exit(
-    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
-) {
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
     exit(0);
 }
 
 pub fn dbg_help(
-    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
-) {
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
     println!("==============================");
     println!("======== RuSuper Help ========\n");
     println!("==============================");
@@ -21,56 +24,69 @@ pub fn dbg_help(
     println!("exit, quit, q\n\tTerminate the program");
     println!("b $XXXXXX\n\tSets a breakpoint for address $XXXXXX");
     println!("c, r\n\tRun the program until a halt is reached, or a breakpoint is hit");
+    Ok(())
 }
 
 pub fn dbg_invalid(
-    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
-) {
-    dbg_help(_args, _debug, _vm);
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, _vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
+    dbg_help(_args, _debug, _vm)?;
+    Err(InvalidDbgArgError::from("Invalid Command."))
 }
 
 pub fn dbg_continue(
-    _args: Vec<TokenSeparator>, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
-) {
+    _args: Vec<&str>, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
     vm.is_running = true;
+    Ok(())
 }
 
-// pub fn dbg_print(
-//     args: Vec<TokenSeparator>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
-// ) {
-// }
-
-/// Print the value at an absolute memory address.
-/// Parameters:
-///     - `address`:    Address to read from.
-///     - `_debug`:     Debugger State, unused.
-///     - `vm`:         Virtual Machine containing memory to read from.
-fn _dbg_print_absolute(address: usize, _debug: &mut super::DebuggerState, vm: &mut VirtualMachine) {
-    let byte_value = vm.memory.get_byte(address);
-    let word_value = vm.memory.get_word(address);
-
-    if byte_value.is_ok() {
-        print!(
-            "{:#08X}: {:#04X} ",
-            address,
-            byte_value.expect("Value was error despite checking")
-        );
+/// Print the value that is stored in a tag or address.
+pub fn dbg_print(
+    args: Vec<&str>, debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
+) -> Result<(), InvalidDbgArgError> {
+    match str_to_values(&args, debug, vm) {
+        Ok((_, address)) => {
+            if let Ok(value) = vm.memory.get_word(address) {
+                println!(
+                    "{:#08X} Byte Value: {:#04X} Word Value: {:#06X}",
+                    address,
+                    vm.memory.get_byte(address).expect(""),
+                    value
+                );
+            }
+            else {
+                return Err(InvalidDbgArgError::from(format!(
+                    "{:#08X} is out of range of memory.",
+                    address
+                )));
+            }
+        }
+        Err(e) => return Err(e),
     }
-    else {
-        print!("Byte Value: Invalid ")
-    }
-
-    if word_value.is_ok() {
-        print!(
-            "Word Value: {:#04X} ",
-            word_value.expect("Word value was error despite checking")
-        );
-    }
-    else {
-        print!("Word Value: Invalid");
-    }
-
-    print!("\n");
+    Ok(())
 }
 
 /**************************************** Tests *************************************************************************/
+
+//TODO:
+// mod tests{
+//     use rand::RngCore;
+
+//     use crate::{debugger::DebuggerState, memory::MEMORY_SIZE};
+
+//     use super::*;
+
+//     #[test]
+//     fn test_dbg_print() {
+
+//         let mut test_debug = DebuggerState::new();
+//         let mut test_vm = VirtualMachine::new();
+//         let mut random_data: Box<[u8; MEMORY_SIZE]> =
+//             vec![0 as u8; MEMORY_SIZE].into_boxed_slice().try_into().unwrap();
+//         rand::thread_rng().fill_bytes(&mut *random_data);
+//         for (index, byte) in random_data.iter().enumerate() {
+//             test_vm.memory.put_byte(index, *byte).unwrap();
+//         }
+//     }
+// }
