@@ -29,15 +29,12 @@ The prefix `$` is allowed wherever an address literal is found to identify a hex
         - `b tag_name+X`: Set a breakpoint at the value represented by `tag_name` plus an offset value.
     - `b $XXXXXX`: Create a breakpoint at absolute address `$XXXXXX`.
         - `b $XXXXXX tag_name`: Create a breakpoint at absolute address `$XXXXXX` with the tag name `tag_name`
-
-
-### Unimplemented/TBD
-- Breakpoints
     - `b show`: Show all current breakpoints in a table, with tag names if applicable.
         - `b list`
     - `b del $XXXXXX`: Remove breakpoint at `$XXXXXX`
         - `b del tag_name`: Remove breakpoint associated with tag `tag_name`.
 
+### Unimplemented/TBD
 - Watches
     - `w $XXXXXX`: **W**atch for value changes at address X, and break if the value is modified.
         - `w $XXXXXX tag_name` Watch for value changes at absolute address `$XXXXXX` with the tag name `tag_name`

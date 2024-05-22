@@ -623,6 +623,7 @@ pub fn create_new_tag(
 }
 
 /// Convert arguments as a vector of strings into a computed address value and any tags that match that value, where possible.
+/// Note that this function will throw an error on any undigested TokenSeparator::Tag (i.e. any new tag).
 /// # Parameters:
 ///     - `args`:       List of arguments to parse.
 ///     - `debug`:      Pointer to debugger to read/write tags.
