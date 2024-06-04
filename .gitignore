@@ -1,6 +1,5 @@
 **/target/*
 **/data/*
-*.sfc
 *.smc
 *.tags
 .vscode/*

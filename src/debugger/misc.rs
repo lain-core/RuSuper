@@ -1,8 +1,8 @@
 use super::{
-    parser::{str_to_values, InvalidDbgArgError},
-    ContinueCommand, DebugFn, ExitCommand, HelpCommand, InvalidCommand, PrintCommand,
-    VirtualMachine,
+    parser::str_to_values, ContinueCommand, DebugFn, ExitCommand, HelpCommand, InvalidCommand,
+    PrintCommand, VirtualMachine,
 };
+use crate::debugger::InvalidDbgArgError;
 use std::process::exit;
 
 /**************************************** Constant Values ***************************************************************/
@@ -63,8 +63,7 @@ impl DebugFn for PrintCommand {
                         vm.memory.get_byte(address).expect(""),
                         value
                     );
-                }
-                else {
+                } else {
                     return Err(InvalidDbgArgError::from(format!(
                         "{:#08X} is out of range of memory.",
                         address

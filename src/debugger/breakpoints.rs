@@ -1,6 +1,9 @@
 use super::{parser::*, *};
 
 /**************************************** Struct and Type definitions ***************************************************/
+
+pub type BreakpointData = parser_data::ParserData;
+
 trait BreakpointFn {
     fn breakpoint_op(
         &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
@@ -61,24 +64,20 @@ impl DebugFn for BreakCommand {
     }
 }
 
-
 impl BreakpointFn for SetOp {
     fn breakpoint_op(
         &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
         let mut cmd_result: Result<(), InvalidDbgArgError> = Ok(());
-        let token_args = parser::str_to_args(&args).unwrap();
+        let token_args = parser::str_to_args(args).unwrap();
         let mut test_value: Result<usize, InvalidDbgArgError> = Err(InvalidDbgArgError::from(""));
 
-
         // If there were no arguments passed just set a breakpoint at the PC if possible
-        if args.len() == 0 {
+        if args.is_empty() {
             test_value = Ok(vm.cpu.get_pc());
-        }
-        else if let Ok((_, value)) = str_to_values(&args, debug, vm) {
+        } else if let Ok((_, value)) = str_to_values(args, debug, vm) {
             test_value = Ok(value);
-        }
-        else if token_args.contains_tag() {
+        } else if token_args.contains_tag() {
             // If the value was constructed purely from literals, or it was made of existing tags, throw it on.
             // Otherwise we need to make a new tag so try to do so.
             if cmd_result.is_ok() {
@@ -89,25 +88,23 @@ impl BreakpointFn for SetOp {
 
         if let Ok(value) = test_value {
             if cmd_result.is_ok() {
-                match debug.breakpoints.contains(&value) {
-                    true => {
+                match debug.breakpoint_state.insert(value) {
+                    Ok(_) => {
+                        println!("Breakpoint created at {:#08X}", value);
+                    }
+                    Err(_e) => {
                         cmd_result = Err(InvalidDbgArgError::from(format!(
                             "{:#08X} already exists in breakpoints.",
                             value
                         )))
                     }
-                    false => {
-                        debug.breakpoints.push(value);
-                        println!("Breakpoint created at {:#08X}", value);
-                    }
                 }
             }
-        }
-        else {
+        } else {
             cmd_result = Err(test_value.unwrap_err());
         }
 
-        return cmd_result;
+        cmd_result
     }
 }
 
@@ -115,18 +112,7 @@ impl BreakpointFn for ListOp {
     fn breakpoint_op(
         &self, _args: &[&str], debug: &mut DebuggerState, _vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
-        print!("\n");
-        println!("  Address  | Tag Name  ");
-        println!("-----------------------");
-        debug.breakpoints.sort();
-        for breakpoint in &debug.breakpoints {
-            print!("  ");
-            print!("{:#08X} |", breakpoint);
-            if let Some(name) = debug.tags.find_key(*breakpoint) {
-                print!(" {}", name);
-            }
-            println!("  \n-----------------------");
-        }
+        debug.breakpoint_state.display();
         Ok(())
     }
 }
@@ -135,15 +121,12 @@ impl BreakpointFn for DeleteOp {
     fn breakpoint_op(
         &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
-        debug.breakpoints.sort();
-
-        match parser::str_to_values(&args, debug, vm) {
+        match parser::str_to_values(args, debug, vm) {
             Ok((tags, address)) => {
-                if debug.breakpoints.contains(&address) {
-                    debug.breakpoints.remove_value(address);
+                if let Some(_value) = debug.breakpoint_state.get(address) {
+                    debug.breakpoint_state.delete(address);
                     println!("Deleted {:#08X} from breakpoints", address);
-                }
-                else {
+                } else {
                     return Err(InvalidDbgArgError::from(format!(
                         "Breakpoint {:#08X} does not exist",
                         address
@@ -152,13 +135,12 @@ impl BreakpointFn for DeleteOp {
 
                 if let Some(tags) = tags {
                     for tag in tags {
-                        if let None = debug.tags.remove(&tag) {
+                        if debug.breakpoint_state.get_tag(&tag).is_none() {
                             return Err(InvalidDbgArgError::from(format!(
                                 "Tag {} does not exist.",
                                 tag
                             )));
-                        }
-                        else {
+                        } else {
                             println!("Deleted {} from tags", &tag);
                         }
                     }
@@ -194,14 +176,11 @@ mod tests {
             let mut test_vm = VirtualMachine::new();
 
             for (test_input, expected_result) in zip(test_inputs, expected_numerics) {
-                assert_eq!(
-                    (),
-                    BreakpointSubCommandTypes::Set
-                        .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
-                        .unwrap()
-                );
-                assert!(test_debug.breakpoints.contains(&expected_result));
-                test_debug.breakpoints.clear();
+                BreakpointSubCommandTypes::Set
+                    .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
+                    .unwrap();
+                assert!(test_debug.breakpoint_state.get(expected_result).is_some());
+                test_debug.breakpoint_state = BreakpointData::new();
             }
         }
 
@@ -214,14 +193,11 @@ mod tests {
             let mut test_vm = VirtualMachine::new();
 
             for (test_input, expected_result) in zip(test_inputs, expected_numerics) {
-                assert_eq!(
-                    (),
-                    BreakpointSubCommandTypes::Set
-                        .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
-                        .unwrap()
-                );
-                test_debug.breakpoints.remove_value(expected_result);
-                assert!(!test_debug.breakpoints.contains(&expected_result));
+                BreakpointSubCommandTypes::Set
+                    .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
+                    .unwrap();
+                test_debug.breakpoint_state.delete(expected_result);
+                assert!(test_debug.breakpoint_state.get(expected_result).is_none());
             }
         }
     }
@@ -268,17 +244,12 @@ mod tests {
 
             for (test_input, expected_result) in zip(test_inputs, numeric_results) {
                 if let Some(result) = expected_result {
-                    assert_eq!(
-                        (),
-                        BreakpointSubCommandTypes::Set
-                            .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
-                            .unwrap()
-                    );
-                    assert!(test_debug.breakpoints.contains(&result));
-                    test_debug.breakpoints.clear();
-                    test_debug.tags.clear();
-                }
-                else {
+                    BreakpointSubCommandTypes::Set
+                        .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
+                        .unwrap();
+                    assert!(test_debug.breakpoint_state.get(result).is_some());
+                    test_debug.breakpoint_state = BreakpointData::new();
+                } else {
                     assert!(BreakpointSubCommandTypes::Set
                         .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
                         .is_err());
@@ -318,27 +289,22 @@ mod tests {
 
             for (test_input, expected_result) in zip(test_inputs, numeric_results) {
                 test_debug
-                    .tags
-                    .insert(TEST_TAG_NAME.to_string(), TEST_BASE_ADDR);
+                    .breakpoint_state
+                    .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
                 test_debug
-                    .tags
-                    .insert(TEST_TAG_NAME2.to_string(), TEST_HEX_VALUE);
+                    .breakpoint_state
+                    .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
                 if let Some(result) = expected_result {
-                    assert_eq!(
-                        (),
-                        BreakpointSubCommandTypes::Set
-                            .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
-                            .unwrap()
-                    );
-                    assert!(test_debug.breakpoints.contains(&result));
-                }
-                else {
+                    BreakpointSubCommandTypes::Set
+                        .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
+                        .unwrap();
+                    assert!(test_debug.breakpoint_state.get(result).is_some());
+                } else {
                     assert!(BreakpointSubCommandTypes::Set
                         .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
                         .is_err());
                 }
-                test_debug.breakpoints.clear();
-                test_debug.tags.clear();
+                test_debug.breakpoint_state = BreakpointData::new();
             }
         }
 
@@ -374,15 +340,20 @@ mod tests {
 
             for (_test_input, expected_result) in zip(string_vectors, numeric_results) {
                 if let Some(result) = expected_result {
-                    test_debug.breakpoints.push(result);
-                    test_debug.tags.insert(TEST_TAG_NAME.to_string(), result);
-                    assert!(test_debug.breakpoints.contains(&result));
-                    assert_eq!(test_debug.tags.get(TEST_TAG_NAME).unwrap(), &result);
+                    test_debug.breakpoint_state.insert(result).unwrap();
+                    test_debug
+                        .breakpoint_state
+                        .insert_tag(TEST_TAG_NAME, result);
+                    assert!(test_debug.breakpoint_state.get(result).is_some());
+                    assert_eq!(
+                        test_debug.breakpoint_state.get_tag(TEST_TAG_NAME).unwrap(),
+                        &result
+                    );
                     BreakpointSubCommandTypes::Delete
                         .breakpoint_op(&[TEST_TAG_NAME], &mut test_debug, &mut test_vm)
                         .unwrap();
-                    assert!(!test_debug.breakpoints.contains(&result));
-                    assert_eq!(test_debug.tags.get(TEST_TAG_NAME), None)
+                    assert!(test_debug.breakpoint_state.get(result).is_none());
+                    assert_eq!(test_debug.breakpoint_state.get_tag(TEST_TAG_NAME), None)
                 }
             }
         }

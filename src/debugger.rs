@@ -1,86 +1,62 @@
 mod breakpoints;
 mod misc;
 mod parser;
+mod parser_data;
+mod step;
+mod utils;
 
 use crate::emu::{self, VirtualMachine};
 use std::{
-    collections::HashMap,
+    fmt,
     fmt::Debug,
     io::{self, Write},
 };
 
-use self::parser::InvalidDbgArgError;
+use self::{breakpoints::BreakpointData, step::StepData};
 /**************************************** Struct and Type definitions ***************************************************/
 
-pub trait FindKeyInHashMap {
-    fn find_key(&self, value: usize) -> Option<&str>;
+/// Error to generate when a bad argument is passed to the debugger.
+#[derive(Debug, Clone)]
+pub struct InvalidDbgArgError {
+    value: String,
 }
 
-impl FindKeyInHashMap for DebugTagTable {
-    /// Given a value, find the first key that matches in a hashmap.
-    fn find_key(&self, value: usize) -> Option<&str> {
-        self.iter().find_map(|(key, val)| {
-            if *val == value {
-                Some(key.as_str())
-            }
-            else {
-                None
-            }
-        })
+impl fmt::Display for InvalidDbgArgError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
 
-/// Allow deleting a value from any Vector of Equatable value <T>.
-pub trait RemoveValueFromVector<T: Eq> {
-    fn remove_value(&mut self, value: T);
-}
-
-impl<T: Eq> RemoveValueFromVector<T> for Vec<T> {
-    /// Delete value from vector wherever found.
-    /// # Parameters:
-    ///     - `self`: Vector of type T
-    ///     - `value`: Value of type T to scan for.
-    fn remove_value(&mut self, value: T) {
-        let mut del_index: Vec<usize> = vec![];
-        for (index, item) in self.into_iter().enumerate() {
-            if *item == value {
-                del_index.push(index);
-            }
-        }
-
-        if del_index.len() > 0 {
-            for index in del_index {
-                self.remove(index);
-            }
+impl From<&str> for InvalidDbgArgError {
+    fn from(value: &str) -> Self {
+        Self {
+            value: value.to_string().clone(),
         }
     }
 }
 
-
-pub type DebugTagTable = HashMap<String, usize>;
+impl From<String> for InvalidDbgArgError {
+    fn from(value: String) -> Self {
+        Self {
+            value: value.clone(),
+        }
+    }
+}
 
 /// Struct to track the operation of the debugger.
-/// is_stepping: if the debugger is running,
-/// steps_to_run: steps until next break,
 /// breakpoints: list of breakpoint addresses to stop at,
-/// watched_vars: variables being watched,
-/// tags:   hashmap of tagged addresses as a HashMap<tag_name, tag_address>.
 struct DebuggerState {
-    pub is_stepping: bool,
-    pub steps_to_run: usize,
-    breakpoints: Vec<usize>,
-    _watched_vars: Vec<usize>,
-    tags: DebugTagTable,
+    breakpoint_state: BreakpointData,
+    step_state: StepData,
+    // watch_state: WatchData,
+    // etc.
 }
 
 impl DebuggerState {
     pub fn new() -> Self {
         Self {
-            is_stepping: false,
-            steps_to_run: 0,
-            _watched_vars: Vec::new(),
-            breakpoints: Vec::new(),
-            tags: HashMap::new(),
+            breakpoint_state: BreakpointData::new(),
+            step_state: StepData::new(),
         }
     }
 }
@@ -166,28 +142,6 @@ impl DebugFn for DebugCommandTypes {
     }
 }
 
-/// Parseable tokens in debugger inputs.
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum TokenSeparator {
-    HexValue,
-    Offset,
-    Divider,       // Represents general divider character.
-    Value(String), // Represents all numeric values (decimal and hex).
-    Tag(String),   // Represents all non-value values (tag strings).
-    Invalid,
-}
-
-impl From<&str> for TokenSeparator {
-    fn from(value: &str) -> Self {
-        match value {
-            "$" => Self::HexValue,
-            "+" => Self::Offset,
-            " " => Self::Divider,
-            _ => Self::Invalid,
-        }
-    }
-}
-
 /**************************************** File Scope Functions **********************************************************/
 
 /// Parse the input from the debugger, decode the command, and then call it's associated function.
@@ -201,9 +155,9 @@ fn check_dbg_input(debug: &mut DebuggerState, vm: &mut VirtualMachine) {
         .read_line(&mut input_text)
         .expect("Failed to read stdin");
     input_text = input_text.to_lowercase();
-    let trimmed: Vec<&str> = input_text.trim().split_whitespace().collect();
+    let trimmed: Vec<&str> = input_text.split_whitespace().collect();
 
-    if trimmed.len() > 0 {
+    if !trimmed.is_empty() {
         if let Err(error) = DebugCommandTypes::from(trimmed[0]).debug_op(&trimmed[1..], debug, vm) {
             println!("{}", error);
         }
@@ -222,23 +176,22 @@ pub fn run(mut vm: VirtualMachine) {
     // Instantiate the table of debugger commands before starting the loop, so we don't churn a ton of memory.
     loop {
         // If the VM is running normally, just continue as usual.
-        if vm.is_running && !debugger.is_stepping {
-            if debugger.breakpoints.contains(&vm.cpu.get_pc()) {
+        if vm.is_running && !debugger.step_state.is_stepping {
+            if let Some(value) = debugger.breakpoint_state.get(vm.cpu.get_pc()) {
                 vm.is_running = false;
-                println!("BREAK: Halted at {:#08X}", &vm.cpu.get_pc());
-            }
-            else {
+                println!("BREAK: Halted at {:#08X}", value);
+            } else {
                 vm.is_running = emu::step_cpu(&mut vm);
             }
         }
         // If the debugger is running the VM by stepping for N steps, check for how many steps are remaining.
-        else if debugger.is_stepping {
+        else if debugger.step_state.is_stepping {
             vm.is_running = emu::step_cpu(&mut vm);
-            debugger.steps_to_run -= 1;
+            debugger.step_state.steps_to_run -= 1;
 
             // Stop when we are finished running
-            if debugger.steps_to_run == 0 {
-                debugger.is_stepping = false;
+            if debugger.step_state.steps_to_run == 0 {
+                debugger.step_state.is_stepping = false;
                 vm.is_running = false;
             }
         }

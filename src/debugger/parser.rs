@@ -1,110 +1,34 @@
-use std::fmt::{self, Debug};
+use crate::debugger::{
+    utils::{HexOperators, HexToString},
+    InvalidDbgArgError,
+};
 
 use crate::{emu::VirtualMachine, memory::MEMORY_END};
 
-use super::{DebuggerState, TokenSeparator};
+use super::DebuggerState;
 
 /**************************************** Struct and Type definitions ***************************************************/
 
-/// Error to generate when a bad argument is passed to the debugger.
-#[derive(Debug, Clone)]
-pub struct InvalidDbgArgError {
-    value: String,
+/// Parseable tokens in debugger inputs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+
+pub enum TokenSeparator {
+    HexValue,
+    Offset,
+    Divider,       // Represents general divider character.
+    Value(String), // Represents all numeric values (decimal and hex).
+    Tag(String),   // Represents all non-value values (tag strings).
+    Invalid,
 }
 
-impl fmt::Display for InvalidDbgArgError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.value) }
-}
-
-impl From<&str> for InvalidDbgArgError {
+impl From<&str> for TokenSeparator {
     fn from(value: &str) -> Self {
-        Self {
-            value: value.to_string().clone(),
+        match value {
+            "$" => Self::HexValue,
+            "+" => Self::Offset,
+            " " => Self::Divider,
+            _ => Self::Invalid,
         }
-    }
-}
-
-impl From<String> for InvalidDbgArgError {
-    fn from(value: String) -> Self {
-        Self {
-            value: value.clone(),
-        }
-    }
-}
-
-/// Helpful operators for translating Strings -> Values
-pub trait HexOperators {
-    fn is_hex(&self) -> bool;
-    fn is_decimal(&self) -> bool;
-    fn to_hex(&self) -> Result<usize, InvalidDbgArgError>;
-}
-
-impl HexOperators for String {
-    /// Check if a value is constructed only from hex digits.
-    /// # Parameters:
-    ///     - `self`
-    /// # Returns:
-    ///     - `true`    if the string was a contained hex value,
-    ///     - `false`   if the string was not a hex value.
-    fn is_hex(&self) -> bool {
-        for char in self.chars() {
-            if !char.is_digit(16) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /// Check if a value is constructed only from decimal digits.
-    /// # Parameters:
-    ///     - `self`
-    /// # Returns:
-    ///     - `true`    if the string consists of only decimal digits.
-    ///     - `false`   if the string was not only decimal digits.
-    fn is_decimal(&self) -> bool {
-        for char in self.chars() {
-            if !char.is_digit(10) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    fn to_hex(&self) -> Result<usize, InvalidDbgArgError> { string_to_hex(self) }
-}
-
-impl HexOperators for &str {
-    fn is_hex(&self) -> bool {
-        for char in self.chars() {
-            if !char.is_digit(16) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    fn is_decimal(&self) -> bool {
-        for char in self.chars() {
-            if !char.is_digit(10) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    fn to_hex(&self) -> Result<usize, InvalidDbgArgError> { string_to_hex(self) }
-}
-
-trait HexToString {
-    fn to_hex_string(&self) -> String;
-}
-
-impl HexToString for usize {
-    fn to_hex_string(&self) -> String {
-        format!("{:#08X}", self)
-            .strip_prefix("0x")
-            .unwrap()
-            .to_string()
     }
 }
 
@@ -131,7 +55,7 @@ impl TokenStreamHelpers for DebugTokenStream {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     /// Checks if there is an offset immediately applied to a tag at any point in the list.
@@ -199,8 +123,7 @@ impl TokenStreamHelpers for DebugTokenStream {
         }
         if tags.len() > 0 {
             Some(tags)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -248,8 +171,7 @@ fn collect_args(argvec: Vec<&str>) -> Result<DebugTokenStream, InvalidDbgArgErro
                 _ => (),
             }
         }
-    }
-    else {
+    } else {
         return Err(InvalidDbgArgError::from("Length of args passed was 0"));
     }
     // If there's anything left in the value buffer at the end throw it on.
@@ -281,8 +203,7 @@ fn collect_tags(tokens: DebugTokenStream) -> DebugTokenStream {
                 else if data.is_hex() {
                     if let Some(TokenSeparator::HexValue) = last_token {
                         new_vec.push(TokenSeparator::Value(data.to_string()));
-                    }
-                    else {
+                    } else {
                         new_vec.push(TokenSeparator::Tag(data.to_string()));
                     }
                 }
@@ -319,9 +240,8 @@ fn validate_tags(
             // When a tag is found, try to dereference it.
             TokenSeparator::Tag(ref tagname) => {
                 // If it was able to be dereferenced, push it on as it's computed value.
-                if let Some(value) = debug.tags.get(tagname) {
-                    tag_as_value_stack
-                        .push(TokenSeparator::Value((*value.to_hex_string()).to_string()));
+                if let Some(value) = debug.breakpoint_state.get_tag(tagname) {
+                    tag_as_value_stack.push(TokenSeparator::Value((*value).to_hex_string()));
                     // All values stored in the hash map will be parsed coming out as hex.
                     tag_as_value_stack.push(TokenSeparator::HexValue);
                 }
@@ -343,7 +263,7 @@ fn validate_tags(
                 // If it was, then try to deref it.
                 if let Some(TokenSeparator::Tag(tagname)) = last_token {
                     // If it can be dereferenced, then it will have already been put on the stack by the Tag case, so just push the Offset on.
-                    if let Some(_value) = debug.tags.get(&tagname) {
+                    if let Some(_value) = debug.breakpoint_state.get_tag(&tagname) {
                         tag_as_value_stack.push(TokenSeparator::Offset);
                     }
                     // If it can't be dereferenced, then print an error, because the user is trying to perform arithmetic with an undefined value.
@@ -364,7 +284,6 @@ fn validate_tags(
         }
         last_token = Some(curr_token);
     }
-
 
     // Reverse the stack back to the proper order.
     let mut result_tokens: DebugTokenStream = vec![];
@@ -448,8 +367,7 @@ fn compute_address_from_args(
                     return Err(InvalidDbgArgError::from(
                         "Value contained a tag which could not be dereferenced",
                     ));
-                }
-                else {
+                } else {
                     deref_args = tokens;
                 }
             }
@@ -491,8 +409,7 @@ fn compute_address_from_args(
             // Lastly, check if the computed value is within memory bounds.
             if val < MEMORY_END {
                 Ok(val)
-            }
-            else {
+            } else {
                 Err(InvalidDbgArgError::from(format!(
                     "Final value {:#X} was out of memory bounds.",
                     val
@@ -502,57 +419,6 @@ fn compute_address_from_args(
         None => Err(InvalidDbgArgError::from(
             "Could not discern a value from arguments passed.",
         )),
-    }
-}
-
-/// Convert a String value into a constructed hex value.
-/// E.G., "$808000" becomes 0x808000.
-/// Parameters:
-///     - `text`:   String to parse.
-/// Returns:
-///     - `Ok(value)`:  Parsed Hex Value.
-///     - `Err(e)`:     If string passed contained data other than a marker and hexa-numeric digits.
-fn string_to_hex(text: &str) -> Result<usize, InvalidDbgArgError> {
-    let mut value = text.to_string().clone();
-
-    if value.starts_with("$") {
-        value = String::from(
-            value
-                .strip_prefix("$")
-                .expect("String did not begin with $"),
-        );
-    }
-    if value.starts_with("0x") {
-        value = String::from(
-            value
-                .strip_prefix("0x")
-                .expect("String did not begin with 0x"),
-        );
-    }
-
-    if value.to_string().is_hex() {
-        let mut digits: Vec<u32> = vec![];
-        // Construct a list of hex digits for each char.
-        for char in value.chars() {
-            digits.push(
-                char.to_digit(16)
-                    .expect("Value was not hex despite checking"),
-            );
-        }
-
-        let mut hex_value = 0;
-        let mut digits_iter = digits.iter();
-        for iters in 0..digits.len() {
-            hex_value |= (digits_iter.next().expect("Iterated past length of digits"))
-                << (((digits.len() - 1) - iters) * 4);
-        }
-        Ok(hex_value as usize)
-    }
-    else {
-        Err(InvalidDbgArgError::from(format!(
-            "Value passed was not a valid hexidecimal number {}",
-            value
-        )))
     }
 }
 
@@ -594,13 +460,14 @@ pub fn create_new_tag(
                 // If the length of this is 0, then the parameter was just `tagname`.
                 // Make a tag at PC.
                 if tokens.len() == 0 {
-                    debug.tags.insert((*tagname).clone(), vm.cpu.get_pc());
+                    debug
+                        .breakpoint_state
+                        .insert_tag(tagname.as_str(), vm.cpu.get_pc());
                     result = Ok(vm.cpu.get_pc());
-                }
-                else {
+                } else {
                     match compute_address_from_args(&tokens, debug, vm) {
                         Ok(value) => {
-                            debug.tags.insert((*tagname).clone(), value);
+                            debug.breakpoint_state.insert_tag(tagname.as_str(), value);
                             result = Ok(value);
                         }
                         Err(e) => {
@@ -611,8 +478,7 @@ pub fn create_new_tag(
                         }
                     }
                 }
-            }
-            else {
+            } else {
                 result = Err(InvalidDbgArgError::from(
                     "Could not find new tag to create in stream.",
                 ));
@@ -660,8 +526,7 @@ pub fn str_to_values(
     if let Some(value) = res_value {
         if let Some(tags) = res_tags {
             cmd_res = Ok((Some(tags.to_vec()), value));
-        }
-        else {
+        } else {
             cmd_res = Ok((None, value));
         }
     }
@@ -672,6 +537,7 @@ pub fn str_to_values(
 /**************************************** Tests *************************************************************************/
 
 #[cfg(test)]
+#[allow(unused_imports)]
 pub mod tests {
     use super::*;
     use rand::Rng;
@@ -1369,11 +1235,11 @@ pub mod tests {
         fn test_validate_tags() {
             let mut test_debugger = DebuggerState::new();
             test_debugger
-                .tags
-                .insert(String::from(TEST_TAG_NAME), TEST_BASE_ADDR);
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
             test_debugger
-                .tags
-                .insert(String::from(TEST_TAG_NAME2), TEST_HEX_VALUE);
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
             let test_tag_tokens = token_tag_as_tags();
             let test_deref_tokens = token_tag_as_deref();
 
@@ -1420,10 +1286,13 @@ pub mod tests {
                         expected_result,
                         create_new_tag(&test_input, &mut debug, &vm).unwrap()
                     );
-                    assert_eq!(expected_result, *debug.tags.get(TEST_TAG_NAME).unwrap());
-                    debug.tags.clear();
-                }
-                else {
+                    assert_eq!(
+                        expected_result,
+                        *debug.breakpoint_state.get_tag(TEST_TAG_NAME).unwrap()
+                    );
+                    // Create a new debugger instance, because deletion is private to breakpoints
+                    debug = DebuggerState::new();
+                } else {
                     assert!(create_new_tag(&test_input, &mut debug, &vm).is_err());
                 }
             }
@@ -1434,10 +1303,12 @@ pub mod tests {
             let mut debug = DebuggerState::new();
             let vm = VirtualMachine::new();
 
-            debug.tags.insert(TEST_TAG_NAME.to_string(), TEST_BASE_ADDR);
             debug
-                .tags
-                .insert(TEST_TAG_NAME2.to_string(), TEST_HEX_VALUE);
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
+            debug
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
 
             let test_tag_tokens = token_tag_as_tags();
 
@@ -1471,10 +1342,19 @@ pub mod tests {
                         expected_result,
                         create_new_tag(&test_input, &mut debug, &vm).unwrap()
                     );
-                    assert_eq!(expected_result, *debug.tags.get(TEST_TAG_NAME3).unwrap());
-                    debug.tags.remove(TEST_TAG_NAME3);
-                }
-                else {
+                    assert_eq!(
+                        expected_result,
+                        *debug.breakpoint_state.get_tag(TEST_TAG_NAME3).unwrap()
+                    );
+
+                    debug = DebuggerState::new();
+                    debug
+                        .breakpoint_state
+                        .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
+                    debug
+                        .breakpoint_state
+                        .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
+                } else {
                     assert!(create_new_tag(&test_input, &mut debug, &vm).is_err());
                 }
             }
@@ -1525,14 +1405,14 @@ pub mod tests {
             let test_vm = VirtualMachine::new();
 
             test_debug
-                .tags
-                .insert(TEST_TAG_NAME.to_string(), TEST_BASE_ADDR);
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
             test_debug
-                .tags
-                .insert(TEST_TAG_NAME2.to_string(), TEST_HEX_VALUE);
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
             test_debug
-                .tags
-                .insert(TEST_TAG_NAME3.to_string(), TEST_BASE_ADDR + TEST_HEX_VALUE);
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME3, TEST_BASE_ADDR + TEST_HEX_VALUE);
 
             for (test_input, expected_result) in zip(string_vectors, value_result) {
                 if let Some(result) = expected_result {
@@ -1540,8 +1420,7 @@ pub mod tests {
                         result,
                         str_to_values(&test_input, &test_debug, &test_vm).unwrap()
                     )
-                }
-                else {
+                } else {
                     assert!(str_to_values(&test_input, &test_debug, &test_vm).is_err());
                 }
             }
@@ -1577,11 +1456,11 @@ pub mod tests {
             let test_vm = VirtualMachine::new();
 
             test_debug
-                .tags
-                .insert(TEST_TAG_NAME.to_string(), TEST_BASE_ADDR);
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
             test_debug
-                .tags
-                .insert(TEST_TAG_NAME2.to_string(), TEST_HEX_VALUE);
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
 
             for (test_input, expected_result) in zip(token_vectors, numeric_results) {
                 if let Some(result) = expected_result {
@@ -1589,8 +1468,7 @@ pub mod tests {
                         result,
                         compute_address_from_args(&test_input, &test_debug, &test_vm).unwrap()
                     );
-                }
-                else {
+                } else {
                     assert!(compute_address_from_args(&test_input, &test_debug, &test_vm).is_err());
                 }
             }
@@ -1599,19 +1477,4 @@ pub mod tests {
         // #[test]
         // fn test_apply_modifiers() {}
     }
-
-    #[test]
-    fn test_string_to_hex() {
-        // Test 100 Random hex values.
-        // We can test across the entire address range, but it does take a lot longer.
-        for _step in 0..100 {
-            let value: usize = rand::thread_rng().gen_range(0x000000..0xFFFFFF);
-            let val_as_string = format!("{:#08X}", value);
-            assert_eq!(value, string_to_hex(&val_as_string).unwrap());
-        }
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_invalid_string_to_hex() { string_to_hex("$invalid").unwrap(); }
 }
