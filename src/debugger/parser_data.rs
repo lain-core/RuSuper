@@ -54,7 +54,7 @@ impl ParserData {
     ///     - `Some(address)`:  The updated address of the inserted tag,
     ///     - `None`:           If the tag was new
     pub fn insert_tag(&mut self, tag: &str, address: usize) -> Option<usize> {
-        if self.get(address).is_some() {
+        if self.get_tag(tag).is_some() {
             return self.tag_db.insert(String::from(tag), address);
         }
         self.tag_db.insert(String::from(tag), address);
@@ -93,7 +93,7 @@ impl ParserData {
         }
     }
 
-    /// Attempt to insert a breakpoint by value alone.
+    /// Attempt to insert a value alone.
     /// # Parameters:
     ///     - `&mut self`
     ///     - `address`: Address to insert.
@@ -129,7 +129,11 @@ impl ParserData {
     ///     - `Some(address)`:  The address that was removed from the table
     ///     - `None`:           If the address was not present in the table.
     pub fn delete(&mut self, address: usize) -> Option<usize> {
-        self.addresses.remove_value(address)
+        if self.addresses.remove_value(address) {
+            Some(address)
+        } else {
+            None
+        }
     }
 
     /// Display the contents of this instance.
@@ -208,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parser_tag_insert() {
+    fn test_parser_data_tag_insert() {
         let mut test_parser_data = ParserData::new();
 
         // Test that the insert works and returns None.
@@ -219,10 +223,10 @@ mod tests {
         // Check the value is correct.
         assert_eq!(test_parser_data.tag_db[TEST_TAG_NAME], TEST_BASE_ADDR);
 
-        // Test that an update works and returns Some(newvalue).
+        // Test that an update works and returns Some(oldvalue).
         assert_eq!(
             test_parser_data.insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR + TEST_HEX_VALUE),
-            Some(TEST_BASE_ADDR + TEST_HEX_VALUE)
+            Some(TEST_BASE_ADDR)
         );
 
         // Check that the new value is correct.
@@ -233,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parser_tag_get() {
+    fn test_parser_data_tag_get() {
         let mut test_parser_data = ParserData::new();
 
         test_parser_data
@@ -258,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parser_tag_delete() {
+    fn test_parser_data_tag_delete() {
         let mut test_parser_data = ParserData::new();
 
         test_parser_data

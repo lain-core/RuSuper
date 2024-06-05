@@ -22,7 +22,7 @@ impl FindKeyInHashMap for DebugTagTable {
 
 /// Allow deleting a value from any Vector of Equatable value <T>.
 pub trait RemoveValueFromVector<T: Eq> {
-    fn remove_value(&mut self, value: T) -> Option<T>;
+    fn remove_value(&mut self, value: T) -> bool;
 }
 
 impl<T: Eq> RemoveValueFromVector<T> for Vec<T> {
@@ -33,22 +33,20 @@ impl<T: Eq> RemoveValueFromVector<T> for Vec<T> {
     /// # Returns:
     ///     - `Some(value)`:    The returned value that was removed from the vector.
     ///     - `None`:           If the value was not present in the vector.
-    fn remove_value(&mut self, value: T) -> Option<T> {
-        let mut del_index: Vec<usize> = vec![];
-        for (index, item) in self.iter_mut().enumerate() {
+    fn remove_value(&mut self, value: T) -> bool {
+        let mut remove_indices: Vec<usize> = vec![];
+        let mut retval: bool = false;
+        for (index, item) in self.iter().enumerate() {
             if *item == value {
-                del_index.push(index);
+                remove_indices.push(index);
+                retval = true;
             }
         }
 
-        if !del_index.is_empty() {
-            for index in del_index {
-                self.remove(index);
-            }
-            Some(value)
-        } else {
-            None
+        for (iterations, item) in remove_indices.iter().enumerate() {
+            self.remove(item - iterations);
         }
+        retval
     }
 }
 

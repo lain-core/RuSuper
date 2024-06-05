@@ -244,16 +244,20 @@ mod tests {
 
             for (test_input, expected_result) in zip(test_inputs, numeric_results) {
                 if let Some(result) = expected_result {
+                    println!(
+                        "Test input for this iteration is {:?} and expected result is {:#08X}",
+                        test_input, result
+                    );
                     BreakpointSubCommandTypes::Set
                         .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
                         .unwrap();
                     assert!(test_debug.breakpoint_state.get(result).is_some());
-                    test_debug.breakpoint_state = BreakpointData::new();
                 } else {
                     assert!(BreakpointSubCommandTypes::Set
                         .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
                         .is_err());
                 }
+                test_debug.breakpoint_state = BreakpointData::new();
             }
         }
 
