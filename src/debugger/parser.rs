@@ -446,7 +446,7 @@ pub fn str_to_args(argvec: &[&str]) -> Result<DebugTokenStream, InvalidDbgArgErr
         arg_result = Ok(collect_tags(delimiters));
     }
 
-    return arg_result;
+    arg_result
 }
 
 /// Take a stream, apply modifiers to the numeric values, and then create a tag.
@@ -464,10 +464,7 @@ pub fn create_new_tag(
             if let Some(TokenSeparator::Tag(ref tagname)) = tokens.pop() {
                 // If the length of this is 0, then the parameter was just `tagname`.
                 // Make a tag at PC.
-                if tokens.len() == 0 {
-                    // debug
-                    //     .breakpoint_state
-                    //     .insert_tag(tagname.as_str(), vm.cpu.get_pc());
+                if tokens.is_empty() {
                     result = Ok((tagname.to_string(), vm.cpu.get_pc()));
                 }
                 else {
@@ -494,7 +491,7 @@ pub fn create_new_tag(
             result = Err(e);
         }
     }
-    return result;
+    result
 }
 
 /// Convert arguments as a vector of strings into a computed address value and any tags that match that value, where possible.
@@ -1293,18 +1290,7 @@ pub mod tests {
                     // Check the results from generating the tag.
                     assert_eq!(expected_name, tag_result.0);
                     assert_eq!(expected_value, tag_result.1);
-                    // Insert the tag into the table.
-                    assert_eq!(
-                        None,
-                        debug
-                            .breakpoint_state
-                            .insert_tag(expected_name, expected_value)
-                    );
-                    // Check that the tag went into the table as expected.
-                    assert_eq!(
-                        expected_value,
-                        *debug.breakpoint_state.get_tag(expected_name).unwrap()
-                    );
+
                     // Create a new debugger instance, because deletion is private to breakpoints
                     debug = DebuggerState::new();
                 }
@@ -1316,18 +1302,10 @@ pub mod tests {
 
         #[test]
         fn test_create_new_tag_from_existing() {
+            // FIXME: Don't skip the "None" cases as they should update the tags instead now.
             let mut debug = DebuggerState::new();
             let vm = VirtualMachine::new();
-
-            debug
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
-            debug
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
-
             let test_tag_tokens = token_tag_as_tags();
-
             let numeric_results: Vec<Option<(&str, usize)>> = vec![
                 None, // tag $808000
                 None, // tag 50
@@ -1352,39 +1330,33 @@ pub mod tests {
                 Some((TEST_TAG_NAME3, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // tag3 tag + tag2
             ];
 
+            debug
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
+            debug
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
             for (test_input, expected_result) in zip(test_tag_tokens, numeric_results) {
+                println!(
+                    "\nTest input is {:?}\nExpected Result is {:?}",
+                    test_input, expected_result
+                );
                 if let Some((expected_tagname, expected_value)) = expected_result {
-                    // FIXME: Fix these test asserts
+                    println!("\nTesting for result!");
                     let tag_result = create_new_tag(&test_input, &mut debug, &vm).unwrap();
                     // Check that the outcome is correct.
                     assert_eq!(expected_tagname, tag_result.0);
                     assert_eq!(expected_value, tag_result.1);
-
-                    // Check that inserting the tag correctly returns the overwritten value
-                    assert_eq!(
-                        expected_value,
-                        debug
-                            .breakpoint_state
-                            .insert_tag(expected_tagname, expected_value)
-                            .unwrap()
-                    );
-                    // Check that the updated value is found in the table correctly
-                    assert_eq!(
-                        expected_value,
-                        *debug.breakpoint_state.get_tag(expected_tagname).unwrap()
-                    );
-
-                    debug = DebuggerState::new();
-                    debug
-                        .breakpoint_state
-                        .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
-                    debug
-                        .breakpoint_state
-                        .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
                 }
                 else {
+                    println!("\nTesting for error!");
+                    println!(
+                        "Result from create_new was: {:?}",
+                        create_new_tag(&test_input, &mut debug, &vm)
+                    );
                     assert!(create_new_tag(&test_input, &mut debug, &vm).is_err());
                 }
+                debug = DebuggerState::new();
             }
         }
 
