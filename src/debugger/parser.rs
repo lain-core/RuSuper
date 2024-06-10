@@ -243,6 +243,7 @@ fn validate_tags(
             // When a tag is found, try to dereference it.
             TokenSeparator::Tag(ref tagname) => {
                 // If it was able to be dereferenced, push it on as it's computed value.
+                // FIXME: This should be dependent on caller to identify which state object is being used
                 if let Some(value) = debug.breakpoint_state.get_tag(tagname) {
                     tag_as_value_stack.push(TokenSeparator::Value((*value).to_hex_string()));
                     // All values stored in the hash map will be parsed coming out as hex.
@@ -498,7 +499,7 @@ pub fn create_new_tag(
 /// Note that this function will throw an error on any undigested TokenSeparator::Tag (i.e. any new tag).
 /// # Parameters:
 ///     - `args`:       List of arguments to parse.
-///     - `debug`:      Pointer to debugger to read/write tags.
+///     - `debug`:      Pointer to debugger to read tags.
 ///     - `vm`:         Pointer to virtual machine, to fetch PC from.
 /// # Result:
 ///     - `Ok(Option<Vec<String>>, usize)`: a pair of all the tags that match to value, and a computed address at value.
@@ -1301,6 +1302,7 @@ pub mod tests {
         }
 
         #[test]
+        /// Tests performed when
         fn test_create_new_tag_from_existing() {
             // FIXME: Don't skip the "None" cases as they should update the tags instead now.
             let mut debug = DebuggerState::new();
@@ -1404,15 +1406,15 @@ pub mod tests {
             let mut test_debug = DebuggerState::new();
             let test_vm = VirtualMachine::new();
 
-            test_debug
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
-            test_debug
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
-            test_debug
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME3, TEST_BASE_ADDR + TEST_HEX_VALUE);
+            // test_debug
+            //     .breakpoint_state
+            //     .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
+            // test_debug
+            //     .breakpoint_state
+            //     .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
+            // test_debug
+            //     .breakpoint_state
+            //     .insert_tag(TEST_TAG_NAME3, TEST_BASE_ADDR + TEST_HEX_VALUE);
 
             for (test_input, expected_result) in zip(string_vectors, value_result) {
                 if let Some(result) = expected_result {
@@ -1455,13 +1457,6 @@ pub mod tests {
             ];
             let mut test_debug = DebuggerState::new();
             let test_vm = VirtualMachine::new();
-
-            test_debug
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
-            test_debug
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
 
             for (test_input, expected_result) in zip(token_vectors, numeric_results) {
                 if let Some(result) = expected_result {
