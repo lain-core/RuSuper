@@ -28,9 +28,7 @@ impl ParserData {
     /// # Returns:
     ///     - `Some(&usize)`:   Address existing at that tag.
     ///     - `None`:           If no value exists for that tag name.
-    pub fn get_tag(&self, tag: &str) -> Option<&usize> {
-        self.tag_db.get(tag)
-    }
+    pub fn get_tag(&self, tag: &str) -> Option<&usize> { self.tag_db.get(tag) }
 
     /// Look to see if the table contains a tag, and return it's name if so.
     /// # Parameters:
@@ -39,13 +37,14 @@ impl ParserData {
     /// # Returns:
     ///     - `Some(tagname)`:  The name of the tag, if found.
     ///     - `None`:           If the tag was not present in the list.
-    pub fn get_tag_name(&self, address: usize) -> Option<&str> {
-        self.tag_db.find_key(address)
-    }
+    pub fn get_tag_name(&self, address: usize) -> Option<&str> { self.tag_db.find_key(address) }
 
     /// Wrapper for inserting a breakpoint with a tag and an address.
     /// If a tag is already present, updates the value and returns it, Otherwise, inserts into the
     /// table.
+    ///
+    /// This function cannot fail.
+    ///
     /// # Parameters:
     ///     - `&mut self`
     ///     - `tag`: Tag value to insert into the table.
@@ -88,7 +87,8 @@ impl ParserData {
     pub fn get(&self, address: usize) -> Option<usize> {
         if self.addresses.contains(&address) {
             Some(address)
-        } else {
+        }
+        else {
             None
         }
     }
@@ -109,13 +109,15 @@ impl ParserData {
                     "Breakpoint {} already exists at {:#08X}",
                     name, value
                 )))
-            } else {
+            }
+            else {
                 Err(InvalidDbgArgError::from(format!(
                     "A breakpoint was already set at {:#08X}",
                     value
                 )))
             }
-        } else {
+        }
+        else {
             self.addresses.push(address);
             Ok(())
         }
@@ -131,7 +133,8 @@ impl ParserData {
     pub fn delete(&mut self, address: usize) -> Option<usize> {
         if self.addresses.remove_value(address) {
             Some(address)
-        } else {
+        }
+        else {
             None
         }
     }

@@ -70,38 +70,31 @@ impl BreakpointFn for SetOp {
     ) -> Result<(), InvalidDbgArgError> {
         let mut cmd_result: Result<(), InvalidDbgArgError> = Ok(());
         let token_args = parser::str_to_args(args).unwrap();
-        let mut test_value: Result<usize, InvalidDbgArgError> = Err(InvalidDbgArgError::from(""));
 
         // If there were no arguments passed just set a breakpoint at the PC if possible
         if args.is_empty() {
-            test_value = Ok(vm.cpu.get_pc());
-        } else if let Ok((_, value)) = str_to_values(args, debug, vm) {
-            test_value = Ok(value);
-        } else if token_args.contains_tag() {
+            cmd_result = debug.breakpoint_state.insert(vm.cpu.get_pc());
+        }
+        else if let Ok((_, value)) = str_to_values(args, debug, vm) {
+            cmd_result = debug.breakpoint_state.insert(value);
+        }
+        else if token_args.contains_tag() {
             // If the value was constructed purely from literals, or it was made of existing tags, throw it on.
             // Otherwise we need to make a new tag so try to do so.
-            if cmd_result.is_ok() {
-                println!("Creating new tag");
-                test_value = create_new_tag(&token_args, debug, vm);
-            }
-        }
-
-        if let Ok(value) = test_value {
-            if cmd_result.is_ok() {
-                match debug.breakpoint_state.insert(value) {
-                    Ok(_) => {
-                        println!("Breakpoint created at {:#08X}", value);
+            let test_tag = create_new_tag(&token_args, debug, vm);
+            match test_tag {
+                Ok((tagname, value)) => match debug.breakpoint_state.insert_tag(&tagname, value) {
+                    Some(value) => {
+                        println!("Updated tag {} to address {:#08X}", tagname, value);
                     }
-                    Err(_e) => {
-                        cmd_result = Err(InvalidDbgArgError::from(format!(
-                            "{:#08X} already exists in breakpoints.",
-                            value
-                        )))
+                    None => {
+                        println!("Set tag {} at address {:#08X}", tagname, value);
                     }
+                },
+                Err(e) => {
+                    cmd_result = Err(e);
                 }
             }
-        } else {
-            cmd_result = Err(test_value.unwrap_err());
         }
 
         cmd_result
@@ -126,7 +119,8 @@ impl BreakpointFn for DeleteOp {
                 if let Some(_value) = debug.breakpoint_state.get(address) {
                     debug.breakpoint_state.delete(address);
                     println!("Deleted {:#08X} from breakpoints", address);
-                } else {
+                }
+                else {
                     return Err(InvalidDbgArgError::from(format!(
                         "Breakpoint {:#08X} does not exist",
                         address
@@ -140,7 +134,8 @@ impl BreakpointFn for DeleteOp {
                                 "Tag {} does not exist.",
                                 tag
                             )));
-                        } else {
+                        }
+                        else {
                             println!("Deleted {} from tags", &tag);
                         }
                     }
@@ -252,7 +247,8 @@ mod tests {
                         .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
                         .unwrap();
                     assert!(test_debug.breakpoint_state.get(result).is_some());
-                } else {
+                }
+                else {
                     assert!(BreakpointSubCommandTypes::Set
                         .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
                         .is_err());
@@ -303,7 +299,8 @@ mod tests {
                         .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
                         .unwrap();
                     assert!(test_debug.breakpoint_state.get(result).is_some());
-                } else {
+                }
+                else {
                     assert!(BreakpointSubCommandTypes::Set
                         .breakpoint_op(test_input.as_slice(), &mut test_debug, &mut test_vm)
                         .is_err());
