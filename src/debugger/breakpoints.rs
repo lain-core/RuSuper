@@ -75,13 +75,13 @@ impl BreakpointFn for SetOp {
         if args.is_empty() {
             cmd_result = debug.breakpoint_state.insert(vm.cpu.get_pc());
         }
-        else if let Ok((_, value)) = str_to_values(args, debug, vm) {
+        else if let Ok((_, value)) = str_to_values(args, &debug.breakpoint_state, vm) {
             cmd_result = debug.breakpoint_state.insert(value);
         }
         else if token_args.contains_tag() {
             // If the value was constructed purely from literals, or it was made of existing tags, throw it on.
             // Otherwise we need to make a new tag so try to do so.
-            let test_tag = create_new_tag(&token_args, debug, vm);
+            let test_tag = create_new_tag(&token_args, &debug.breakpoint_state, vm);
             match test_tag {
                 Ok((tagname, value)) => match debug.breakpoint_state.insert_tag(&tagname, value) {
                     Some(value) => {
@@ -114,7 +114,7 @@ impl BreakpointFn for DeleteOp {
     fn breakpoint_op(
         &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
-        match parser::str_to_values(args, debug, vm) {
+        match parser::str_to_values(args, &debug.breakpoint_state, vm) {
             Ok((tags, address)) => {
                 if let Some(_value) = debug.breakpoint_state.get(address) {
                     debug.breakpoint_state.delete(address);

@@ -5,7 +5,7 @@ use crate::debugger::{
 
 use crate::{emu::VirtualMachine, memory::MEMORY_END};
 
-use super::DebuggerState;
+use super::{parser_data::ParserData, DebuggerState};
 
 /**************************************** Struct and Type definitions ***************************************************/
 
@@ -232,7 +232,7 @@ fn collect_tags(tokens: DebugTokenStream) -> DebugTokenStream {
 ///     - `Ok(Vec<TokenSeparator>)`:    A new list of tokens, with the tags represented as Value(*tagname) where possible.
 ///     - `Err(InvalidDbgArgError)`:    An error informing the user the first tag which is invalid.
 fn validate_tags(
-    mut tokens: DebugTokenStream, debug: &DebuggerState,
+    mut tokens: DebugTokenStream, table: &ParserData,
 ) -> Result<DebugTokenStream, InvalidDbgArgError> {
     let mut last_token: Option<TokenSeparator> = None;
     let mut tag_as_value_stack: DebugTokenStream = vec![];
@@ -242,12 +242,19 @@ fn validate_tags(
         match curr_token {
             // When a tag is found, try to dereference it.
             TokenSeparator::Tag(ref tagname) => {
-                // If it was able to be dereferenced, push it on as it's computed value.
-                // FIXME: This should be dependent on caller to identify which state object is being used
-                if let Some(value) = debug.breakpoint_state.get_tag(tagname) {
-                    tag_as_value_stack.push(TokenSeparator::Value((*value).to_hex_string()));
-                    // All values stored in the hash map will be parsed coming out as hex.
-                    tag_as_value_stack.push(TokenSeparator::HexValue);
+                if let Some(value) = table.get_tag(tagname) {
+                    // If it was dereferenced successfully, check if the last token was an offset, i.e.: TAG + VALUE.
+
+                    // If it was, then this operation requires the literal value and so push the dereferenced value onto the stack.
+                    if let Some(TokenSeparator::Offset) = last_token {
+                        tag_as_value_stack.push(TokenSeparator::Value((*value).to_hex_string()));
+                        // All values stored in the hash map will be parsed coming out as hex.
+                        tag_as_value_stack.push(TokenSeparator::HexValue);
+                    }
+                    // Otherwise, the user is updating this tag, so put it back on as-is.
+                    else {
+                        tag_as_value_stack.push(TokenSeparator::Tag(tagname.clone()));
+                    }
                 }
                 // If not, check if the last token was an Offset.
                 else {
@@ -255,7 +262,7 @@ fn validate_tags(
                     if let Some(TokenSeparator::Offset) = last_token {
                         return Err(InvalidDbgArgError::from(format!("Attempting to perform arithmetic with a tag which is not yet defined: {}", tagname)));
                     }
-                    // Otherwise, insert it to the front of the stack, so that it can be read as a result of the modifications right
+                    // Otherwise, insert it to the front of the stack, so that it can be read as a result of the modifications to the right
                     else {
                         tag_as_value_stack.insert(0, curr_token.clone());
                     }
@@ -266,8 +273,11 @@ fn validate_tags(
             TokenSeparator::Offset => {
                 // If it was, then try to deref it.
                 if let Some(TokenSeparator::Tag(tagname)) = last_token {
-                    // If it can be dereferenced, then it will have already been put on the stack by the Tag case, so just push the Offset on.
-                    if let Some(_value) = debug.breakpoint_state.get_tag(&tagname) {
+                    // If it can be dereferenced, push it on as a value with the offset, i.e.: VALUE + TAG.
+                    if let Some(tag_value) = table.get_tag(&tagname) {
+                        tag_as_value_stack.push(TokenSeparator::Value(tag_value.to_hex_string()));
+                        tag_as_value_stack.push(TokenSeparator::HexValue);
+
                         tag_as_value_stack.push(TokenSeparator::Offset);
                     }
                     // If it can't be dereferenced, then print an error, because the user is trying to perform arithmetic with an undefined value.
@@ -355,7 +365,7 @@ fn apply_modifiers(
 /// Returns:
 ///     - `address`: A fully computed address.
 fn compute_address_from_args(
-    args: &DebugTokenStream, debug: &DebuggerState, vm: &VirtualMachine,
+    args: &DebugTokenStream, table: &ParserData, vm: &VirtualMachine,
 ) -> Result<usize, InvalidDbgArgError> {
     let mut address: Option<usize> = None;
     let mut modifiers: Vec<TokenSeparator> = vec![];
@@ -364,7 +374,7 @@ fn compute_address_from_args(
 
     let mut deref_args = args.clone();
     if args.contains_tag() {
-        match validate_tags(deref_args, &debug) {
+        match validate_tags(deref_args, table) {
             Ok(tokens) => {
                 // If the tokens still contain a tag, return an error because the value can't be calculated.
                 if tokens.contains_tag() {
@@ -456,11 +466,11 @@ pub fn str_to_args(argvec: &[&str]) -> Result<DebugTokenStream, InvalidDbgArgErr
 /// # Returns:
 ///     - `usize`:      Finalized address of the tag, for immediate use.
 pub fn create_new_tag(
-    input: &DebugTokenStream, debug: &mut DebuggerState, vm: &VirtualMachine,
+    input: &DebugTokenStream, table: &ParserData, vm: &VirtualMachine,
 ) -> Result<(String, usize), InvalidDbgArgError> {
     let result: Result<(String, usize), InvalidDbgArgError>;
 
-    match validate_tags(collect_tags(input.to_vec()), debug) {
+    match validate_tags(collect_tags(input.to_vec()), table) {
         Ok(mut tokens) => {
             if let Some(TokenSeparator::Tag(ref tagname)) = tokens.pop() {
                 // If the length of this is 0, then the parameter was just `tagname`.
@@ -469,7 +479,7 @@ pub fn create_new_tag(
                     result = Ok((tagname.to_string(), vm.cpu.get_pc()));
                 }
                 else {
-                    match compute_address_from_args(&tokens, debug, vm) {
+                    match compute_address_from_args(&tokens, table, vm) {
                         Ok(value) => {
                             result = Ok((tagname.to_string(), value));
                         }
@@ -499,13 +509,13 @@ pub fn create_new_tag(
 /// Note that this function will throw an error on any undigested TokenSeparator::Tag (i.e. any new tag).
 /// # Parameters:
 ///     - `args`:       List of arguments to parse.
-///     - `debug`:      Pointer to debugger to read tags.
+///     - `table`:      Pointer to table to read tags.
 ///     - `vm`:         Pointer to virtual machine, to fetch PC from.
 /// # Result:
 ///     - `Ok(Option<Vec<String>>, usize)`: a pair of all the tags that match to value, and a computed address at value.
 ///     - `Err(InvalidDbgArgError)`:        Any error found while parsing.
 pub fn str_to_values(
-    args: &[&str], debug: &DebuggerState, vm: &VirtualMachine,
+    args: &[&str], table: &ParserData, vm: &VirtualMachine,
 ) -> Result<(Option<Vec<String>>, usize), InvalidDbgArgError> {
     // Initialize the result vars
     let token_args = str_to_args(&args)?;
@@ -514,7 +524,7 @@ pub fn str_to_values(
     let mut res_tags: Option<Vec<String>> = None;
     let mut res_value: Option<usize> = None;
 
-    match compute_address_from_args(&token_args, debug, vm) {
+    match compute_address_from_args(&token_args, table, vm) {
         Ok(value) => res_value = Some(value),
         Err(e) => cmd_res = Err(e),
     }
@@ -978,29 +988,27 @@ pub mod tests {
         }
 
         /// Test cases where a tag is represented as the value at tagname's address.
+        /// If a tag is not followed by or led by an operator, it will included as Tag("tagname") still.
         pub fn token_tag_as_deref() -> Vec<DebugTokenStream> {
             vec![
                 /******* Value After Tag *******/
                 // tag $808000
                 // Tag followed by Hex Literal
                 vec![
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                 ],
                 // tag 50
                 // Tag followed by decimal literal
                 vec![
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
                 ],
                 // tag $808000 + $0A
                 // Tag, as specified by a hex literal + hex offset
                 vec![
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
@@ -1010,8 +1018,7 @@ pub mod tests {
                 // tag $808000 + 50
                 // Tag, as specified by a hex literal + decimal offset
                 vec![
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
@@ -1040,15 +1047,13 @@ pub mod tests {
                 vec![
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // 50 tag
                 // Decimal literal followed by tag
                 vec![
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // $808000 + $0A tag
                 // tag, as defined as Hex literal + Hex offset
@@ -1058,8 +1063,7 @@ pub mod tests {
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // $808000 + 50 tag
                 // tag, as defined as Hex Literal + Decimal Offset
@@ -1068,8 +1072,7 @@ pub mod tests {
                     TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
                     TokenSeparator::Offset,
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // $0A + tag
                 // Hex literal offset by tag (Tag should exist prior)
@@ -1094,24 +1097,19 @@ pub mod tests {
                     TokenSeparator::Offset,
                     TokenSeparator::HexValue,
                     TokenSeparator::Value(String::from(TEST_HEX_VALUE_STR)),
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 // +50 tag
                 // tag as decimal offset from PC
                 vec![
                     TokenSeparator::Offset,
                     TokenSeparator::Value(String::from(TEST_DECIMAL_VALUE_STR)),
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                    TokenSeparator::Tag(String::from(TEST_TAG_NAME)),
                 ],
                 /******* Other Tag Cases *******/
                 // tag
                 // Just a tag name
-                vec![
-                    TokenSeparator::HexValue,
-                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
-                ],
+                vec![TokenSeparator::Tag(String::from(TEST_TAG_NAME))],
                 // tag + tag
                 // Adding a tag value to itself (should exist prior)
                 vec![
@@ -1180,7 +1178,8 @@ pub mod tests {
 
             for (test_input, expected_result) in zip(token_vectors, numeric_result_vector) {
                 let test_result =
-                    compute_address_from_args(&test_input, &test_debug, &test_vm).unwrap();
+                    compute_address_from_args(&test_input, &test_debug.breakpoint_state, &test_vm)
+                        .unwrap();
                 println!(
                     "Expected Result was {:#08X} Test Result was {:#08X}",
                     expected_result, test_result
@@ -1198,7 +1197,8 @@ pub mod tests {
 
             for (test_input, expected_result) in zip(token_vectors, numeric_result_vector) {
                 let test_result =
-                    compute_address_from_args(&test_input, &test_debug, &test_vm).unwrap();
+                    compute_address_from_args(&test_input, &test_debug.breakpoint_state, &test_vm)
+                        .unwrap();
                 println!(
                     "Expected Result was {:#08X} Test Result was {:#08X}",
                     expected_result, test_result
@@ -1238,18 +1238,15 @@ pub mod tests {
 
         #[test]
         fn test_validate_tags() {
-            let mut test_debugger = DebuggerState::new();
-            test_debugger
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
-            test_debugger
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
+            let mut test_table = ParserData::new();
+            test_table.insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
+            test_table.insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
             let test_tag_tokens = token_tag_as_tags();
             let test_deref_tokens = token_tag_as_deref();
 
             for (test_input, expected_result) in zip(test_tag_tokens, test_deref_tokens) {
-                let test_result = validate_tags(test_input, &test_debugger).unwrap();
+                println!("Test input is: {:?}", test_input);
+                let test_result = validate_tags(test_input, &test_table).unwrap();
                 assert_eq!(expected_result, test_result);
             }
         }
@@ -1287,7 +1284,8 @@ pub mod tests {
 
             for (test_input, expected_result) in zip(test_tag_tokens, numeric_results) {
                 if let Some((expected_name, expected_value)) = expected_result {
-                    let tag_result = create_new_tag(&test_input, &mut debug, &vm).unwrap();
+                    let tag_result =
+                        create_new_tag(&test_input, &debug.breakpoint_state, &vm).unwrap();
                     // Check the results from generating the tag.
                     assert_eq!(expected_name, tag_result.0);
                     assert_eq!(expected_value, tag_result.1);
@@ -1296,7 +1294,7 @@ pub mod tests {
                     debug = DebuggerState::new();
                 }
                 else {
-                    assert!(create_new_tag(&test_input, &mut debug, &vm).is_err());
+                    assert!(create_new_tag(&test_input, &debug.breakpoint_state, &vm).is_err());
                 }
             }
         }
@@ -1304,26 +1302,25 @@ pub mod tests {
         #[test]
         /// Tests performed when
         fn test_create_new_tag_from_existing() {
-            // FIXME: Don't skip the "None" cases as they should update the tags instead now.
-            let mut debug = DebuggerState::new();
+            let mut test_table;
             let vm = VirtualMachine::new();
             let test_tag_tokens = token_tag_as_tags();
             let numeric_results: Vec<Option<(&str, usize)>> = vec![
-                None, // tag $808000
-                None, // tag 50
-                None, // tag $808000 + $0A
-                None, // tag $808000 + 50
-                None, // tag +$0A
-                None, // tag +50
+                Some((TEST_TAG_NAME, TEST_BASE_ADDR)),     // tag $808000
+                Some((TEST_TAG_NAME, TEST_DECIMAL_VALUE)), // tag 50
+                Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // tag $808000 + $0A
+                Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_DECIMAL_VALUE))), // tag $808000 + 50
+                Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // tag +$0A
+                Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_DECIMAL_VALUE))), // tag +50
                 /* Value before tag */
-                None, // $808000 tag
-                None, // 50 tag
-                None, // $808000 + $0A tag
-                None, // $808000 + 50 tag
-                None, // $0A + tag
-                None, // 50 + tag
-                None, // +$0A tag
-                None, // +50 tag
+                Some((TEST_TAG_NAME, TEST_BASE_ADDR)), // $808000 tag
+                Some((TEST_TAG_NAME, TEST_DECIMAL_VALUE)), // 50 tag
+                Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // $808000 + $0A tag
+                Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_DECIMAL_VALUE))), // $808000 + 50 tag
+                None,                                  // $0A + tag
+                None,                                  // 50 + tag
+                Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // +$0A tag
+                Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_DECIMAL_VALUE))), // +50 tag
                 /* Other */
                 None,                                                      // tag
                 None,                                                      // tag + tag
@@ -1332,20 +1329,21 @@ pub mod tests {
                 Some((TEST_TAG_NAME3, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // tag3 tag + tag2
             ];
 
-            debug
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
-            debug
-                .breakpoint_state
-                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
+
             for (test_input, expected_result) in zip(test_tag_tokens, numeric_results) {
+                test_table = ParserData::new();
+                test_table.insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
+                test_table.insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
+
                 println!(
                     "\nTest input is {:?}\nExpected Result is {:?}",
                     test_input, expected_result
                 );
+
+
                 if let Some((expected_tagname, expected_value)) = expected_result {
-                    println!("\nTesting for result!");
-                    let tag_result = create_new_tag(&test_input, &mut debug, &vm).unwrap();
+                    let tag_result = create_new_tag(&test_input, &test_table, &vm).unwrap();
+                    println!("Result was: {:?}", tag_result);
                     // Check that the outcome is correct.
                     assert_eq!(expected_tagname, tag_result.0);
                     assert_eq!(expected_value, tag_result.1);
@@ -1354,11 +1352,10 @@ pub mod tests {
                     println!("\nTesting for error!");
                     println!(
                         "Result from create_new was: {:?}",
-                        create_new_tag(&test_input, &mut debug, &vm)
+                        create_new_tag(&test_input, &test_table, &vm)
                     );
-                    assert!(create_new_tag(&test_input, &mut debug, &vm).is_err());
+                    assert!(create_new_tag(&test_input, &test_table, &vm).is_err());
                 }
-                debug = DebuggerState::new();
             }
         }
 
@@ -1406,25 +1403,27 @@ pub mod tests {
             let mut test_debug = DebuggerState::new();
             let test_vm = VirtualMachine::new();
 
-            // test_debug
-            //     .breakpoint_state
-            //     .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
-            // test_debug
-            //     .breakpoint_state
-            //     .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
-            // test_debug
-            //     .breakpoint_state
-            //     .insert_tag(TEST_TAG_NAME3, TEST_BASE_ADDR + TEST_HEX_VALUE);
+            test_debug
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
+            test_debug
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
+            test_debug
+                .breakpoint_state
+                .insert_tag(TEST_TAG_NAME3, TEST_BASE_ADDR + TEST_HEX_VALUE);
 
             for (test_input, expected_result) in zip(string_vectors, value_result) {
                 if let Some(result) = expected_result {
                     assert_eq!(
                         result,
-                        str_to_values(&test_input, &test_debug, &test_vm).unwrap()
+                        str_to_values(&test_input, &test_debug.breakpoint_state, &test_vm).unwrap()
                     )
                 }
                 else {
-                    assert!(str_to_values(&test_input, &test_debug, &test_vm).is_err());
+                    assert!(
+                        str_to_values(&test_input, &test_debug.breakpoint_state, &test_vm).is_err()
+                    );
                 }
             }
         }
@@ -1433,40 +1432,49 @@ pub mod tests {
         fn test_compute_address_from_args() {
             let token_vectors = token_tag_as_deref();
             let numeric_results: Vec<Option<usize>> = vec![
-                None,           // tag $808000
-                None,           // tag 50
-                None,           // tag $808000 + $0A
-                None,           // tag $808000 + 50
-                Some(0x80800A), // tag +$0A
-                Some(0x808032), // tag +50
+                Some(TEST_BASE_ADDR),                      // tag $808000
+                Some(TEST_DECIMAL_VALUE),                  // tag 50
+                Some(TEST_BASE_ADDR + TEST_HEX_VALUE),     // tag $808000 + $0A
+                Some(TEST_BASE_ADDR + TEST_DECIMAL_VALUE), // tag $808000 + 50
+                Some(TEST_BASE_ADDR + TEST_HEX_VALUE),     // tag +$0A
+                Some(TEST_BASE_ADDR + TEST_DECIMAL_VALUE), // tag +50
                 /* Value before tag */
-                None,           // $808000 tag
-                None,           // 50 tag
-                None,           // $808000 + $0A tag
-                None,           // $808000 + 50 tag
-                Some(0x80800A), // $0A + tag
-                Some(0x808032), // 50 + tag
-                None,           // will fail  // +$0A tag
-                None,           // will fail  // +50 tag
+                Some(TEST_BASE_ADDR),                      // $808000 tag
+                Some(TEST_DECIMAL_VALUE),                  // 50 tag
+                Some(TEST_BASE_ADDR + TEST_HEX_VALUE),     // $808000 + $0A tag
+                Some(TEST_BASE_ADDR + TEST_DECIMAL_VALUE), // $808000 + 50 tag
+                Some(TEST_BASE_ADDR + TEST_HEX_VALUE),     // $0A + tag
+                Some(TEST_BASE_ADDR + TEST_DECIMAL_VALUE), // 50 + tag
+                Some(TEST_BASE_ADDR + TEST_HEX_VALUE),     // will fail  // +$0A tag
+                Some(TEST_BASE_ADDR + TEST_DECIMAL_VALUE), // will fail  // +50 tag
                 /* Other */
-                Some(0x808000), // tag
-                None,           // tag + tag
-                Some(0x80800A), // tag + tag2
-                None,           // will fail, // tag + tag2 tag3
-                None,           // will fail  // tag3 tag + tag2
+                None,                                  // tag
+                None,                                  // tag + tag
+                Some(TEST_BASE_ADDR + TEST_HEX_VALUE), // tag + tag2
+                None,                                  // will fail, // tag + tag2 tag3
+                None,                                  // will fail  // tag3 tag + tag2
             ];
-            let mut test_debug = DebuggerState::new();
+            let mut test_table;
             let test_vm = VirtualMachine::new();
 
             for (test_input, expected_result) in zip(token_vectors, numeric_results) {
+                test_table = ParserData::new();
+                test_table.insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
+                test_table.insert_tag(TEST_TAG_NAME2, TEST_HEX_VALUE);
+
+                println!("Test Case is: {:?}", test_input);
+                println!(
+                    "Output was: {:?}",
+                    compute_address_from_args(&test_input, &test_table, &test_vm)
+                );
                 if let Some(result) = expected_result {
                     assert_eq!(
                         result,
-                        compute_address_from_args(&test_input, &test_debug, &test_vm).unwrap()
+                        compute_address_from_args(&test_input, &test_table, &test_vm).unwrap()
                     );
                 }
                 else {
-                    assert!(compute_address_from_args(&test_input, &test_debug, &test_vm).is_err());
+                    assert!(compute_address_from_args(&test_input, &test_table, &test_vm).is_err());
                 }
             }
         }

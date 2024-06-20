@@ -54,7 +54,8 @@ impl DebugFn for PrintCommand {
     fn debug_op(
         &self, args: &[&str], debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
-        match str_to_values(&args, debug, vm) {
+        // TODO: FIXME: Only operates on the table of breakpoints right now. In the future, this should collate a list of all available tables.
+        match str_to_values(&args, &debug.breakpoint_state, vm) {
             Ok((_, address)) => {
                 if let Ok(value) = vm.memory.get_word(address) {
                     println!(
@@ -63,7 +64,8 @@ impl DebugFn for PrintCommand {
                         vm.memory.get_byte(address).expect(""),
                         value
                     );
-                } else {
+                }
+                else {
                     return Err(InvalidDbgArgError::from(format!(
                         "{:#08X} is out of range of memory.",
                         address
