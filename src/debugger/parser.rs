@@ -5,7 +5,7 @@ use crate::debugger::{
 
 use crate::{emu::VirtualMachine, memory::MEMORY_END};
 
-use super::{parser_data::ParserData, DebuggerState};
+use super::parser_data::ParserData;
 
 /**************************************** Struct and Type definitions ***************************************************/
 
@@ -83,7 +83,7 @@ impl TokenStreamHelpers for DebugTokenStream {
             }
             last_token = Some((*token).clone());
         }
-        return false;
+        false
     }
 
     /// Return the index of the next tag in the list.
@@ -95,11 +95,8 @@ impl TokenStreamHelpers for DebugTokenStream {
     ///     - `Some(index)`:    The index of the next tag in the list.
     fn _next_tag(&self, start_index: usize) -> Option<usize> {
         for (index, token) in self[start_index..].iter().enumerate() {
-            match token {
-                TokenSeparator::Tag(_) => {
-                    return Some(index);
-                }
-                _ => (),
+            if let TokenSeparator::Tag(_) = token {
+                return Some(index);
             }
         }
         None
@@ -114,14 +111,11 @@ impl TokenStreamHelpers for DebugTokenStream {
     fn get_tag_names(&self) -> Option<Vec<String>> {
         let mut tags: Vec<String> = vec![];
         for token in self {
-            match token {
-                TokenSeparator::Tag(name) => {
-                    tags.push(name.clone());
-                }
-                _ => (),
+            if let TokenSeparator::Tag(name) = token {
+                tags.push(name.clone());
             }
         }
-        if tags.len() > 0 {
+        if !tags.is_empty() {
             Some(tags)
         }
         else {
@@ -137,20 +131,20 @@ impl TokenStreamHelpers for DebugTokenStream {
 ///     - `argvec`: List of arguments passed by the user to the function,
 ///     - `debug`:  Debugger state which contains the table of tags where needed.
 /// # Returns:
-///     - `Ok(Vec<TokenSeparator>)`:    List of tokens, where tags inside are represented as Value(tagname).
+///     - `Ok(DebugTokenStream)`:    Vector of tokens, where tags inside are represented as Value(tagname).
 ///     - `Err(InvalidDbgArgError)`:    Error if the user passed in an invalid argument.
 fn collect_args(argvec: Vec<&str>) -> Result<DebugTokenStream, InvalidDbgArgError> {
     let mut delimiters: DebugTokenStream = vec![];
     let mut value_buffer: String = String::new();
 
     let args = argvec.join(" ");
-    if args.len() > 0 {
+    if !args.is_empty() {
         for current_char in args.chars() {
             let current_token = TokenSeparator::from(current_char.to_string().as_str());
             match current_token {
                 // If a separator is found, clear the buffer of other characters and then push on the sepatator.
                 TokenSeparator::HexValue | TokenSeparator::Offset => {
-                    if value_buffer.len() > 0 {
+                    if !value_buffer.is_empty() {
                         delimiters.push(TokenSeparator::Value(value_buffer));
                         value_buffer = String::new();
                     }
@@ -159,7 +153,7 @@ fn collect_args(argvec: Vec<&str>) -> Result<DebugTokenStream, InvalidDbgArgErro
 
                 // If we found a divider, just clear the buffer.
                 TokenSeparator::Divider => {
-                    if value_buffer.len() > 0 {
+                    if !value_buffer.is_empty() {
                         delimiters.push(TokenSeparator::Value(value_buffer));
                         value_buffer = String::new();
                     }
@@ -177,7 +171,7 @@ fn collect_args(argvec: Vec<&str>) -> Result<DebugTokenStream, InvalidDbgArgErro
         return Err(InvalidDbgArgError::from("Length of args passed was 0"));
     }
     // If there's anything left in the value buffer at the end throw it on.
-    if value_buffer.len() > 0 {
+    if !value_buffer.is_empty() {
         delimiters.push(TokenSeparator::Value(value_buffer));
     }
     Ok(delimiters)
@@ -189,7 +183,7 @@ fn collect_args(argvec: Vec<&str>) -> Result<DebugTokenStream, InvalidDbgArgErro
 /// # Parameters:
 ///     - `tokens`:         A list of tokens to digest, where all tags are represented as TokenSeparator::Value(tagname).
 /// # Returns:
-///     - A list of tokens, with TokenSeparator::Values, where all tags are represented as TokenSeparator::Tag(tagname).
+///     - `DebugTokenStream`: A vector of tokens, with TokenSeparator::Values, where all tags are represented as TokenSeparator::Tag(tagname).
 fn collect_tags(tokens: DebugTokenStream) -> DebugTokenStream {
     let mut last_token: Option<TokenSeparator> = None;
     let mut new_vec: DebugTokenStream = vec![];
@@ -201,8 +195,8 @@ fn collect_tags(tokens: DebugTokenStream) -> DebugTokenStream {
                 if data.is_decimal() {
                     new_vec.push(TokenSeparator::Value(data.to_string()));
                 }
-                // If the value is in hex, check that the modifier was found to be present, or else we are looking at a tag name.
                 else if data.is_hex() {
+                    // If the value is in hex, check that the modifier was found to be present, or else we are looking at a tag name.
                     if let Some(TokenSeparator::HexValue) = last_token {
                         new_vec.push(TokenSeparator::Value(data.to_string()));
                     }
@@ -229,7 +223,7 @@ fn collect_tags(tokens: DebugTokenStream) -> DebugTokenStream {
 ///     - `tokens`:     Mutable list of TokenSeparator tokens, where Tags are represented as Tag(tagname).
 ///     - `debug`:      Debugger with the list of tags to match from.
 /// Returns:
-///     - `Ok(Vec<TokenSeparator>)`:    A new list of tokens, with the tags represented as Value(*tagname) where possible.
+///     - `Ok(Vec<TokenSeparator>)`:    A new list of tokens, with the tags represented as Value(*tagname) where possible, and any unknown tags at the tail.
 ///     - `Err(InvalidDbgArgError)`:    An error informing the user the first tag which is invalid.
 fn deref_tags(
     mut tokens: DebugTokenStream, table: &ParserData,
@@ -356,7 +350,7 @@ fn apply_modifiers(
         }
 
         // Digest any modifiers found.
-        if modifiers.len() > 0 {
+        if !modifiers.is_empty() {
             // Move right to left an apply the modifiers to the value.
             while let Some(ref modi) = modifiers.pop() {
                 match *modi {
@@ -370,11 +364,11 @@ fn apply_modifiers(
                         match base_addr {
                             // If there is some base address to operate on, add the scratch value to it.
                             Some(addr_value) => {
-                                scratch_value = addr_value + scratch_value;
+                                scratch_value += addr_value;
                             }
                             // If the address is none, the offset is relative to PC.
                             None => {
-                                scratch_value = vm.cpu.get_pc() + scratch_value;
+                                scratch_value += vm.cpu.get_pc();
                             }
                         }
                     }
@@ -391,7 +385,8 @@ fn apply_modifiers(
 ///     - `args`: Arguments passed to the command, where tags are represented as Value(*tagname).
 ///     - `vm`:     Virtual machine to access memory or program counter from.
 /// Returns:
-///     - `address`: A fully computed address.
+///     - `Ok(address)`: A fully computed address.
+///     - `Err(InvalidDbgArgError)`: If the tags in the stream failed to be dereferenced, or some other malformed data was found.
 fn compute_address_from_args(
     args: &DebugTokenStream, table: &ParserData, vm: &VirtualMachine,
 ) -> Result<usize, InvalidDbgArgError> {
@@ -474,10 +469,9 @@ fn compute_address_from_args(
 /// Parse a list of directives out into a collection of tokens.
 /// Parameters:
 ///     - `&args`:   The input from the user with the command removed and all other values concatenated.
-///     - `&debug`:  The debugger with the table of set tags to read.
 /// Returns:
 ///     - `Ok(Vec<TokenSeparator>)`:   List of the arguments the user passed parsed into tokens.
-///     - `Err(InvalidDbgArgError)`:
+///     - `Err(InvalidDbgArgError)`:   If any of the arguments given were invalid.
 pub fn str_to_args(argvec: &[&str]) -> Result<DebugTokenStream, InvalidDbgArgError> {
     let mut arg_result: Result<DebugTokenStream, InvalidDbgArgError> =
         Err(InvalidDbgArgError::from("Invalid Arguments"));
@@ -493,9 +487,12 @@ pub fn str_to_args(argvec: &[&str]) -> Result<DebugTokenStream, InvalidDbgArgErr
 
 /// Take a stream, apply modifiers to the numeric values, and then create a tag.
 /// # Parameters:
-///     - `&tokens`:     Stream of tokens to parse, where tags have been deref'd where possible.
+///     - `&input`:     Stream of tokens to parse, where tags have been deref'd where possible.
+///     - `&table`:     `ParserData` type table of values to process.
+///     - `&vm`:        `VirtualMachine` maintaining the state to use for obtaining the pc.
 /// # Returns:
-///     - `usize`:      Finalized address of the tag, for immediate use.
+///     - `Ok(address)`:      Finalized address of the tag, for immediate use.
+///     - `Err(InvalidDbgArgError)`: If any of the arguments passed in were incorrect.
 pub fn create_new_tag(
     input: &DebugTokenStream, table: &ParserData, vm: &VirtualMachine,
 ) -> Result<(String, usize), InvalidDbgArgError> {
@@ -554,10 +551,6 @@ pub fn create_new_tag(
 pub fn str_to_values(
     args: &[&str], table: &ParserData, vm: &VirtualMachine,
 ) -> Result<(Option<Vec<String>>, usize), InvalidDbgArgError> {
-    println!("Input to str_to_values was: {:?}", args);
-    // table.display();
-
-    // Initialize the result vars
     let token_args = str_to_args(args)?;
     let mut cmd_res: Result<(Option<Vec<String>>, usize), InvalidDbgArgError> =
         Err(InvalidDbgArgError::from("Unable to parse arguments"));
@@ -1201,6 +1194,7 @@ pub mod tests {
     mod debugger_literal_tests {
         use super::testconst::*;
         use super::*;
+        use crate::debugger::DebuggerState;
 
         #[test]
         fn test_collect_args() {
@@ -1255,6 +1249,7 @@ pub mod tests {
     mod debugger_tag_tests {
         use super::testconst::*;
         use super::*;
+        use crate::debugger::DebuggerState;
 
         #[test]
         fn test_collect_args() {
@@ -1351,7 +1346,6 @@ pub mod tests {
         }
 
         #[test]
-        /// Tests performed when
         fn test_create_new_tag_from_existing() {
             let mut test_table;
             let vm = VirtualMachine::new();

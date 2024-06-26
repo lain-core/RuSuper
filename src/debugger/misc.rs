@@ -55,7 +55,7 @@ impl DebugFn for PrintCommand {
         &self, args: &[&str], debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
         // TODO: FIXME: Only operates on the table of breakpoints right now. In the future, this should collate a list of all available tables.
-        match str_to_values(&args, &debug.breakpoint_state, vm) {
+        match str_to_values(args, &debug.breakpoint_state, vm) {
             Ok((_, address)) => {
                 if let Ok(value) = vm.memory.get_word(address) {
                     println!(

@@ -13,7 +13,8 @@ impl FindKeyInHashMap for DebugTagTable {
         self.iter().find_map(|(key, val)| {
             if *val == value {
                 Some(key.as_str())
-            } else {
+            }
+            else {
                 None
             }
         })
@@ -66,11 +67,11 @@ impl HexOperators for String {
     ///     - `false`   if the string was not a hex value.
     fn is_hex(&self) -> bool {
         for char in self.chars() {
-            if !char.is_digit(16) {
+            if !char.is_ascii_hexdigit() {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     /// Check if a value is constructed only from decimal digits.
@@ -81,40 +82,36 @@ impl HexOperators for String {
     ///     - `false`   if the string was not only decimal digits.
     fn is_decimal(&self) -> bool {
         for char in self.chars() {
-            if !char.is_digit(10) {
+            if !char.is_ascii_digit() {
                 return false;
             }
         }
-        return true;
+        true
     }
 
-    fn to_hex(&self) -> Result<usize, InvalidDbgArgError> {
-        string_to_hex(self)
-    }
+    fn to_hex(&self) -> Result<usize, InvalidDbgArgError> { string_to_hex(self) }
 }
 
 impl HexOperators for &str {
     fn is_hex(&self) -> bool {
         for char in self.chars() {
-            if !char.is_digit(16) {
+            if !char.is_ascii_hexdigit() {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     fn is_decimal(&self) -> bool {
         for char in self.chars() {
-            if !char.is_digit(10) {
+            if !char.is_ascii_digit() {
                 return false;
             }
         }
-        return true;
+        true
     }
 
-    fn to_hex(&self) -> Result<usize, InvalidDbgArgError> {
-        string_to_hex(self)
-    }
+    fn to_hex(&self) -> Result<usize, InvalidDbgArgError> { string_to_hex(self) }
 }
 
 pub trait HexToString {
@@ -140,10 +137,10 @@ impl HexToString for usize {
 fn string_to_hex(text: &str) -> Result<usize, InvalidDbgArgError> {
     let mut value = text.to_string().clone();
 
-    if value.starts_with("$") {
+    if value.starts_with('$') {
         value = String::from(
             value
-                .strip_prefix("$")
+                .strip_prefix('$')
                 .expect("String did not begin with $"),
         );
     }
@@ -172,7 +169,8 @@ fn string_to_hex(text: &str) -> Result<usize, InvalidDbgArgError> {
                 << (((digits.len() - 1) - iters) * 4);
         }
         Ok(hex_value as usize)
-    } else {
+    }
+    else {
         Err(InvalidDbgArgError::from(format!(
             "Value passed was not a valid hexidecimal number {}",
             value
@@ -197,7 +195,5 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_invalid_string_to_hex() {
-        super::string_to_hex("$invalid").unwrap();
-    }
+    fn test_invalid_string_to_hex() { super::string_to_hex("$invalid").unwrap(); }
 }
