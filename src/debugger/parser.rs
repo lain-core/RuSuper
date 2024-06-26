@@ -237,83 +237,102 @@ fn deref_tags(
     let mut last_token: Option<TokenSeparator> = None;
     let mut tag_as_value_stack: DebugTokenStream = vec![];
 
+    // If the length of the stack coming in is just one, then shortcut the processing and just apply to it.
+    // FIXME: This should probably be covered by the generalized case anyways. This might need some refactoring.
+    if tokens.len() == 1 {
+        if let Some(TokenSeparator::Tag(tagname)) = tokens.first() {
+            // Try and deref.
+            if let Some(value) = table.get_tag(tagname) {
+                tag_as_value_stack.push(TokenSeparator::Value(value.to_hex_string()));
+                tag_as_value_stack.push(TokenSeparator::HexValue);
+            }
+            else {
+                tag_as_value_stack.push(TokenSeparator::Tag(tagname.to_string()));
+            }
+        }
+    }
     // Push each of the values off of token onto the new tag_as_value_stack.
-    while let Some(curr_token) = tokens.pop() {
-        match curr_token {
-            // When a tag is found, try to dereference it.
-            TokenSeparator::Tag(ref tagname) => {
-                if let Some(value) = table.get_tag(tagname) {
-                    // If it was dereferenced successfully, check if the last token was an offset, i.e.: TAG + VALUE.
-
-                    // If it was, then this operation requires the literal value and so push the dereferenced value onto the stack.
-                    if let Some(TokenSeparator::Offset) = last_token {
-                        tag_as_value_stack.push(TokenSeparator::Value((*value).to_hex_string()));
-                        // All values stored in the hash map will be parsed coming out as hex.
-                        tag_as_value_stack.push(TokenSeparator::HexValue);
-                    }
-                    // Otherwise check if the last token was a tag, and if so, then this can be pushed back on.
-                    // If not, then this is the one we are trying to assign, and stick it at the front.
-                    else {
-                        if let Some(TokenSeparator::Tag(_)) = last_token {
+    else {
+        while let Some(curr_token) = tokens.pop() {
+            match curr_token {
+                // When a tag is found, try to dereference it.
+                TokenSeparator::Tag(ref tagname) => {
+                    if let Some(value) = table.get_tag(tagname) {
+                        // If it was dereferenced successfully, check if the last token was an offset, i.e.: TAG + VALUE.
+                        // If it was, then this operation requires the literal value and so push the dereferenced value onto the stack.
+                        if let Some(TokenSeparator::Offset) = last_token {
+                            tag_as_value_stack
+                                .push(TokenSeparator::Value((*value).to_hex_string()));
+                            // All values stored in the hash map will be parsed coming out as hex.
+                            tag_as_value_stack.push(TokenSeparator::HexValue);
+                        }
+                        // Otherwise check if the last token was a tag, and if so, then this can be pushed back on.
+                        // If not, then this is the one we are trying to assign, and stick it at the front.
+                        else if let Some(TokenSeparator::Tag(_)) = last_token {
                             tag_as_value_stack.push(TokenSeparator::Tag(tagname.clone()));
                         }
-                        else{
+                        // Otherwise, this might be a tag value we're seeking to update.
+                        else {
                             tag_as_value_stack.insert(0, TokenSeparator::Tag(tagname.clone()));
                         }
                     }
-                }
-                // If not, check if the last token was an Offset.
-                else {
-                    // If it was, then print an error, because the user is trying to perform arithmetic with an undefined value.
-                    if let Some(TokenSeparator::Offset) = last_token {
-                        return Err(InvalidDbgArgError::from(format!("Attempting to perform arithmetic with a tag which is not yet defined: {}", tagname)));
-                    }
-                    // Otherwise, insert it to the front of the stack, so that it can be read as a result of the modifications to the right
+                    // If not, check if the last token was an Offset.
                     else {
-                        tag_as_value_stack.insert(0, curr_token.clone());
+                        // If it was, then print an error, because the user is trying to perform arithmetic with an undefined value.
+                        if let Some(TokenSeparator::Offset) = last_token {
+                            return Err(InvalidDbgArgError::from(format!("Attempting to perform arithmetic with a tag which is not yet defined: {}", tagname)));
+                        }
+                        // Otherwise, insert it to the front of the stack, so it will be at the end of our final list.
+                        else {
+                            tag_as_value_stack.insert(0, curr_token.clone());
+                        }
                     }
                 }
-            }
 
-            // When an offset is found, check if the last item was a tag.
-            TokenSeparator::Offset => {
-                // If it was, then try to deref it.
-                if let Some(TokenSeparator::Tag(tagname)) = last_token {
-                    // If it can be dereferenced, push it on as a value with the offset, i.e.: VALUE + TAG.
-                    if let Some(tag_value) = table.get_tag(&tagname) {
-                        if let Some(TokenSeparator::Tag(_)) = tag_as_value_stack.last() {
-                            tag_as_value_stack.pop();
+                // When an offset is found, check if the last item was a tag.
+                TokenSeparator::Offset => {
+                    // If it was, then try to deref it.
+                    if let Some(TokenSeparator::Tag(tagname)) = last_token {
+                        // If it can be dereferenced, push it on as a value with the offset, i.e.: VALUE + TAG.
+                        if let Some(tag_value) = table.get_tag(&tagname) {
+                            if let Some(TokenSeparator::Tag(_)) = tag_as_value_stack.last() {
+                                tag_as_value_stack.pop();
+                            }
+
+                            tag_as_value_stack
+                                .push(TokenSeparator::Value(tag_value.to_hex_string()));
+                            tag_as_value_stack.push(TokenSeparator::HexValue);
+
+                            tag_as_value_stack.push(TokenSeparator::Offset);
                         }
-
-                        tag_as_value_stack.push(TokenSeparator::Value(tag_value.to_hex_string()));
-                        tag_as_value_stack.push(TokenSeparator::HexValue);
-
+                        // If it can't be dereferenced, then print an error, because the user is trying to perform arithmetic with an undefined value.
+                        else {
+                            return Err(InvalidDbgArgError::from(format!("Attempting to perform arithmetic with a tag which is not yet defined: {}", tagname)));
+                        }
+                    }
+                    // If it wasn't a tag, just push this on and proceed as normal.
+                    else {
                         tag_as_value_stack.push(TokenSeparator::Offset);
                     }
-                    // If it can't be dereferenced, then print an error, because the user is trying to perform arithmetic with an undefined value.
-                    else {
-                        return Err(InvalidDbgArgError::from(format!("Attempting to perform arithmetic with a tag which is not yet defined: {}", tagname)));
-                    }
                 }
-                // If it wasn't a tag, just push this on and proceed as normal.
-                else {
-                    tag_as_value_stack.push(TokenSeparator::Offset);
-                }
-            }
 
-            // Any other operator doesn't have much bearing on our tag, so just leave them as they are.
-            _ => {
-                tag_as_value_stack.push(curr_token.clone());
+                // Any other operator doesn't have much bearing on our tag, so just leave them as they are.
+                _ => {
+                    tag_as_value_stack.push(curr_token.clone());
+                }
             }
+            last_token = Some(curr_token);
         }
-        last_token = Some(curr_token);
     }
+
 
     // Reverse the stack back to the proper order.
     let mut result_tokens: DebugTokenStream = vec![];
     while let Some(token) = tag_as_value_stack.pop() {
         result_tokens.push(token);
     }
+
+    println!("Output from deref_tags is {:?}", result_tokens);
     Ok(result_tokens)
 }
 
@@ -393,9 +412,6 @@ fn compute_address_from_args(
                     return Err(InvalidDbgArgError::from(
                         "Value contained a tag which could not be dereferenced",
                     ));
-                }
-                else if tokens.contains_tag() && tokens.len() == 1 {
-                    deref_args = vec![TokenSeparator::Value(vm.cpu.get_pc().to_string())];
                 }
                 else {
                     deref_args = tokens;
@@ -487,30 +503,36 @@ pub fn create_new_tag(
 
     match deref_tags(collect_tags(input.to_vec()), table) {
         Ok(mut tokens) => {
-            if let Some(TokenSeparator::Tag(ref tagname)) = tokens.pop() {
-                // If the length of this is 0, then the parameter was just `tagname`.
-                // Make a tag at PC.
-                if tokens.is_empty() {
-                    result = Ok((tagname.to_string(), vm.cpu.get_pc()));
-                }
-                else {
-                    match compute_address_from_args(&tokens, table, vm) {
-                        Ok(value) => {
-                            result = Ok((tagname.to_string(), value));
-                        }
-                        Err(e) => {
-                            result = Err(InvalidDbgArgError::from(format!(
-                                "{} Cannot create tag {}.",
-                                e, tagname
-                            )));
-                        }
+            let target_tag = tokens.pop();
+
+            // If there was only one item in the stack then tackle the special case.
+            if tokens.is_empty() {
+                match target_tag {
+                    // If the only thing returned is a single tag name, make a tag at the PC.
+                    Some(TokenSeparator::Tag(ref tagname)) => {
+                        result = Ok((tagname.to_string(), vm.cpu.get_pc()));
                     }
+                    _ => result = Err(InvalidDbgArgError::from("Found no arguments in stream.")),
                 }
             }
+            // Otherwise proceed as normal.
             else {
-                result = Err(InvalidDbgArgError::from(
-                    "Could not find new tag to create in stream.",
-                ));
+                match target_tag {
+                    Some(TokenSeparator::Tag(ref tagname)) => {
+                        match compute_address_from_args(&tokens, table, vm) {
+                            Ok(value) => {
+                                result = Ok((tagname.to_string(), value));
+                            }
+                            Err(e) => {
+                                result = Err(InvalidDbgArgError::from(format!(
+                                    "{} Cannot create tag {}.",
+                                    e, tagname
+                                )));
+                            }
+                        }
+                    }
+                    _ => result = Err(InvalidDbgArgError::from("Found no arguments in stream.")),
+                }
             }
         }
         Err(e) => {
@@ -532,8 +554,11 @@ pub fn create_new_tag(
 pub fn str_to_values(
     args: &[&str], table: &ParserData, vm: &VirtualMachine,
 ) -> Result<(Option<Vec<String>>, usize), InvalidDbgArgError> {
+    println!("Input to str_to_values was: {:?}", args);
+    // table.display();
+
     // Initialize the result vars
-    let token_args = str_to_args(&args)?;
+    let token_args = str_to_args(args)?;
     let mut cmd_res: Result<(Option<Vec<String>>, usize), InvalidDbgArgError> =
         Err(InvalidDbgArgError::from("Unable to parse arguments"));
     let mut res_tags: Option<Vec<String>> = None;
@@ -1124,7 +1149,10 @@ pub mod tests {
                 /******* Other Tag Cases *******/
                 // tag
                 // Just a tag name
-                vec![TokenSeparator::Tag(String::from(TEST_TAG_NAME))],
+                vec![
+                    TokenSeparator::HexValue,
+                    TokenSeparator::Value(String::from(TEST_BASE_ADDR_STR)),
+                ],
                 // tag + tag
                 // Adding a tag value to itself (should exist prior)
                 vec![
@@ -1263,7 +1291,7 @@ pub mod tests {
             for (test_input, expected_result) in zip(test_tag_tokens, test_deref_tokens) {
                 // println!("Test input is {:?}", test_input);
                 let test_result = deref_tags(test_input, &test_table).unwrap();
-                
+
                 // println!("Test result was {:?}", test_result);
                 assert_eq!(expected_result, test_result);
             }
@@ -1301,6 +1329,11 @@ pub mod tests {
             ];
 
             for (test_input, expected_result) in zip(test_tag_tokens, numeric_results) {
+                // println!(
+                //     "\nTest input is {:?}\nExpected Result is {:?}",
+                //     test_input, expected_result
+                // );
+
                 if let Some((expected_name, expected_value)) = expected_result {
                     let tag_result =
                         create_new_tag(&test_input, &debug.breakpoint_state, &vm).unwrap();
@@ -1328,8 +1361,8 @@ pub mod tests {
                 Some((TEST_TAG_NAME, TEST_DECIMAL_VALUE)), // tag 50
                 Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // tag $808000 + $0A
                 Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_DECIMAL_VALUE))), // tag $808000 + 50
-                None, // tag +$0A
-                None, // tag +50
+                None,                                      // tag +$0A
+                None,                                      // tag +50
                 /* Value before tag */
                 Some((TEST_TAG_NAME, TEST_BASE_ADDR)), // $808000 tag
                 Some((TEST_TAG_NAME, TEST_DECIMAL_VALUE)), // 50 tag
@@ -1340,9 +1373,9 @@ pub mod tests {
                 Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // +$0A tag
                 Some((TEST_TAG_NAME, (TEST_BASE_ADDR + TEST_DECIMAL_VALUE))), // +50 tag
                 /* Other */
-                Some((TEST_TAG_NAME, TEST_BASE_ADDR)),                     // tag
-                None,                                                      // tag + tag
-                None,                                                      // tag + tag2
+                None, // FIXME: This use case is not common, but is unaccounted for.
+                None, // tag + tag
+                None, // tag + tag2
                 Some((TEST_TAG_NAME3, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // tag + tag2 tag3
                 Some((TEST_TAG_NAME3, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // tag3 tag + tag2
             ];
@@ -1450,23 +1483,23 @@ pub mod tests {
         fn test_compute_address_from_args() {
             let token_vectors = token_tag_as_deref();
             let numeric_results: Vec<Option<usize>> = vec![
-                None,                                       // tag $808000
-                None,                                       // tag 50
-                None,                                       // tag $808000 + $0A
-                None,                                       // tag $808000 + 50
-                Some(TEST_BASE_ADDR + TEST_HEX_VALUE),      // tag +$0A
-                Some(TEST_BASE_ADDR + TEST_DECIMAL_VALUE),  // tag +50
+                None,                                      // tag $808000
+                None,                                      // tag 50
+                None,                                      // tag $808000 + $0A
+                None,                                      // tag $808000 + 50
+                Some(TEST_BASE_ADDR + TEST_HEX_VALUE),     // tag +$0A
+                Some(TEST_BASE_ADDR + TEST_DECIMAL_VALUE), // tag +50
                 /* Value before tag */
-                None,                                       // $808000 tag
-                None,                                       // 50 tag
-                None,                                       // $808000 + $0A tag
-                None,                                       // $808000 + 50 tag
-                Some(TEST_BASE_ADDR + TEST_HEX_VALUE),      // $0A + tag
-                Some(TEST_BASE_ADDR + TEST_DECIMAL_VALUE),  // 50 + tag
-                None,                                       // will fail  // +$0A tag
-                None,                                       // will fail  // +50 tag
+                None,                                      // $808000 tag
+                None,                                      // 50 tag
+                None,                                      // $808000 + $0A tag
+                None,                                      // $808000 + 50 tag
+                Some(TEST_BASE_ADDR + TEST_HEX_VALUE),     // $0A + tag
+                Some(TEST_BASE_ADDR + TEST_DECIMAL_VALUE), // 50 + tag
+                None,                                      // will fail  // +$0A tag
+                None,                                      // will fail  // +50 tag
                 /* Other */
-                Some(TEST_BASE_ADDR),                   // tag
+                Some(TEST_BASE_ADDR),                  // tag
                 None,                                  // tag + tag
                 Some(TEST_BASE_ADDR + TEST_HEX_VALUE), // tag + tag2
                 None,                                  // will fail, // tag + tag2 tag3

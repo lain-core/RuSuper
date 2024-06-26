@@ -53,13 +53,15 @@ impl ParserData {
     ///     - `Some(address)`:  The updated address of the inserted tag,
     ///     - `None`:           If the tag was new
     pub fn insert_tag(&mut self, tag: &str, address: usize) -> Option<usize> {
-        if self.get_tag(tag).is_some() {
-            return self.tag_db.insert(String::from(tag), address);
+        if let Some(old_value) = self.tag_db.insert(String::from(tag), address) {
+            self.addresses.remove_value(old_value);
+            self.addresses.push(address);
+            Some(address)
         }
-        self.tag_db.insert(String::from(tag), address);
-        self.addresses.push(address);
-
-        None
+        else {
+            self.addresses.push(address);
+            None
+        }
     }
 
     /// Delete a tag and it's associated address from the hash map and the table.
@@ -69,7 +71,7 @@ impl ParserData {
     /// # Returns:
     ///     - `Some(tagname, value)`: If the value was present.
     ///     - `None`:                   If the value didn't exist in the table.
-    pub fn _delete_tag(&mut self, tag: &str) -> Option<(String, usize)> {
+    pub fn delete_tag(&mut self, tag: &str) -> Option<(String, usize)> {
         if let Some(value) = self.tag_db.remove_entry(tag) {
             self.delete(value.1);
             return Some(value);
@@ -152,6 +154,7 @@ impl ParserData {
             if let Some(name) = self.get_tag_name(*value) {
                 print!(" {}", name);
             }
+            println!();
         }
         println!("  \n-----------------------");
     }
@@ -229,7 +232,7 @@ mod tests {
         // Test that an update works and returns Some(oldvalue).
         assert_eq!(
             test_parser_data.insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR + TEST_HEX_VALUE),
-            Some(TEST_BASE_ADDR)
+            Some(TEST_BASE_ADDR + TEST_HEX_VALUE)
         );
 
         // Check that the new value is correct.
@@ -274,7 +277,7 @@ mod tests {
 
         // Check that the tag has been deleted correctly and the returned value is correct.
         assert_eq!(
-            test_parser_data._delete_tag(TEST_TAG_NAME).unwrap().1,
+            test_parser_data.delete_tag(TEST_TAG_NAME).unwrap().1,
             TEST_BASE_ADDR
         );
 

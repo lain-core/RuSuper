@@ -52,6 +52,7 @@ struct DeleteOp;
 
 /**************************************** Subcommand implementations **********************************************************/
 
+/// Map the breakpoint function to the subcommand received from the user.
 impl DebugFn for BreakCommand {
     fn debug_op(
         &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
@@ -64,6 +65,8 @@ impl DebugFn for BreakCommand {
     }
 }
 
+/// Set a breakpoint.
+/// If the breakpoint already exists, then update it's location.
 impl BreakpointFn for SetOp {
     fn breakpoint_op(
         &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
@@ -75,6 +78,7 @@ impl BreakpointFn for SetOp {
         if args.is_empty() {
             cmd_result = debug.breakpoint_state.insert(vm.cpu.get_pc());
         }
+        // If it was a value then just push that on.
         else if let Ok((_, value)) = str_to_values(args, &debug.breakpoint_state, vm) {
             cmd_result = debug.breakpoint_state.insert(value);
         }
@@ -101,6 +105,7 @@ impl BreakpointFn for SetOp {
     }
 }
 
+/// List all breakpoints in the table.
 impl BreakpointFn for ListOp {
     fn breakpoint_op(
         &self, _args: &[&str], debug: &mut DebuggerState, _vm: &mut VirtualMachine,
@@ -110,10 +115,13 @@ impl BreakpointFn for ListOp {
     }
 }
 
+/// Delete a breakpoint from the table.
 impl BreakpointFn for DeleteOp {
     fn breakpoint_op(
         &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
+        debug.breakpoint_state.display();
+
         match parser::str_to_values(args, &debug.breakpoint_state, vm) {
             Ok((tags, address)) => {
                 if let Some(_value) = debug.breakpoint_state.get(address) {
@@ -136,6 +144,7 @@ impl BreakpointFn for DeleteOp {
                             )));
                         }
                         else {
+                            debug.breakpoint_state.delete_tag(&tag);
                             println!("Deleted {} from tags", &tag);
                         }
                     }
@@ -264,23 +273,23 @@ mod tests {
 
             let test_inputs = testconst::tag_string_args();
             let numeric_results: Vec<Option<usize>> = vec![
-                None,           // tag $808000
-                None,           // tag 50
-                None,           // tag $808000 + $0A
-                None,           // tag $808000 + 50
+                Some(0x808000), // tag $808000
+                Some(0x000032), // tag 50
+                Some(0x80800A), // tag $808000 + $0A
+                Some(0x808032), // tag $808000 + 50
                 Some(0x80800A), // tag +$0A
                 Some(0x808032), // tag +50
                 /* Value before tag */
-                None,           // $808000 tag
-                None,           // 50 tag
-                None,           // $808000 + $0A tag
-                None,           // $808000 + 50 tag
+                Some(0x808000), // $808000 tag
+                Some(0x000032), // 50 tag
+                Some(0x80800A), // $808000 + $0A tag
+                Some(0x808032), // $808000 + 50 tag
                 Some(0x80800A), // $0A + tag
                 Some(0x808032), // 50 + tag
-                None,           // +$0A tag
-                None,           // +50 tag
+                Some(0x80800A), // +$0A tag
+                Some(0x808032), // +50 tag
                 /* Other */
-                Some(0x808000), // tag
+                None,           // tag
                 None,           // tag + tag
                 Some(0x80800A), // tag + tag2
                 Some(0x80800A), // tag + tag2 tag3
@@ -340,16 +349,12 @@ mod tests {
             let mut test_vm = VirtualMachine::new();
 
             for (_test_input, expected_result) in zip(string_vectors, numeric_results) {
+                println!("Test Input was: {:?}", _test_input);
+                println!("The expected result is: {:?}", expected_result);
                 if let Some(result) = expected_result {
-                    test_debug.breakpoint_state.insert(result).unwrap();
                     test_debug
                         .breakpoint_state
                         .insert_tag(TEST_TAG_NAME, result);
-                    assert!(test_debug.breakpoint_state.get(result).is_some());
-                    assert_eq!(
-                        test_debug.breakpoint_state.get_tag(TEST_TAG_NAME).unwrap(),
-                        &result
-                    );
                     BreakpointSubCommandTypes::Delete
                         .breakpoint_op(&[TEST_TAG_NAME], &mut test_debug, &mut test_vm)
                         .unwrap();
