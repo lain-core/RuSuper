@@ -750,13 +750,12 @@ fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
             }
 
             // If a custom is present, then figure out what it is.
-            if data.mode.coproc == RomCoProcessor::Custom {
-                if data.header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT
-                    || data.header[HDR_FIXED_VAL_INDEX] == HDR_SUBTYPE_PRESENT
-                {
-                    data.mode.custom_coproc =
-                        CustomCoProcessor::from(data.opt_header[OPT_SUB_CART_TYPE_INDEX]);
-                }
+            if data.mode.coproc == RomCoProcessor::Custom
+                && (data.header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT
+                    || data.header[HDR_FIXED_VAL_INDEX] == HDR_SUBTYPE_PRESENT)
+            {
+                data.mode.custom_coproc =
+                    CustomCoProcessor::from(data.opt_header[OPT_SUB_CART_TYPE_INDEX]);
             }
 
             if (romtype == CartType::ROMCoCpuSram || romtype == CartType::ROMCoCpuSramBattery) {

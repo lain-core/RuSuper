@@ -1377,9 +1377,9 @@ impl CpuState {
     /// # Returns
     ///     - `true`:    If running,
     ///     - `false`:   If run should halt.
-    pub fn step(&mut self, mut mem: &mut memory::Memory) -> bool {
-        let next_instruction = self.fetch_and_decode(&mem);
-        self.execute(next_instruction, &mut mem)
+    pub fn step(&mut self, mem: &mut memory::Memory) -> bool {
+        let next_instruction = self.fetch_and_decode(mem);
+        self.execute(next_instruction, mem)
     }
 
     /// Fetch an instruction from memory.
@@ -1402,24 +1402,20 @@ impl CpuState {
     /// # Returns
     ///     - true:      If continuing running
     ///     - false:     If a BRK or STP has been reached.
-    fn execute(&mut self, inst: CpuInstruction, mut p_mem: &mut memory::Memory) -> bool {
-        let continue_run: bool;
+    fn execute(&mut self, inst: CpuInstruction, p_mem: &mut memory::Memory) -> bool {
         let parameter_location: usize =
             memory::compose_address(self.prog_bank, self.pc + INST_PARAM_OFFSET);
-        let parameter_value: u16;
         let pc_addr_increment: u16 = inst.width as u16;
 
-        match inst.width {
-            CpuParamWidth::NO => parameter_value = 0,
-            CpuParamWidth::_SHORT => {
-                parameter_value = p_mem.get_byte(parameter_location).unwrap() as u16
-            }
-            CpuParamWidth::_LONG => parameter_value = p_mem.get_word(parameter_location).unwrap(),
-        }
+        let parameter_value = match inst.width {
+            CpuParamWidth::NO => 0,
+            CpuParamWidth::_SHORT => p_mem.get_byte(parameter_location).unwrap() as u16,
+            CpuParamWidth::_LONG => p_mem.get_word(parameter_location).unwrap(),
+        };
 
         // Call the function to execute.
         println!("Executing {:?} with width {:?}", inst.opcode, inst.width);
-        continue_run = (inst.function)(self, &mut p_mem, parameter_value);
+        let continue_run = (inst.function)(self, p_mem, parameter_value);
         self.pc += pc_addr_increment;
 
         continue_run

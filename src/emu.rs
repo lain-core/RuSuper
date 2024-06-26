@@ -81,7 +81,7 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
         // Initialize the VM and then load the ROM into memory.
         vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
     }
-    print!("Success.\n");
+    println!("Success.");
 
     vm.clocks.clock_speed = match vm.romdata.mode.speed {
         romdata::RomClkSpeed::SlowRom => SLOWROM_CLOCK_CYCLE_TICK_SEC,
@@ -126,5 +126,5 @@ pub fn step_cpu(vm: &mut VirtualMachine) -> bool {
         vm.clocks.cpu_clock_cycles_elapsed += 1;
         vm.cpu.cycles_to_pend -= 1;
     }
-    return vm_running;
+    vm_running
 }

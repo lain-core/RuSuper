@@ -21,7 +21,7 @@ pub struct InvalidAddressError {
 }
 
 impl InvalidAddressError {
-    pub fn new(addr: usize) -> Self { Self { addr: addr } }
+    pub fn new(addr: usize) -> Self { Self { addr } }
 }
 
 impl fmt::Display for InvalidAddressError {
