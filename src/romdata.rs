@@ -85,21 +85,21 @@ const EV_EMU_NMI_INDEX: usize = EV_EMU_ABORT_INDEX + EV_EMU_ABORT_LEN;
 const EV_EMU_RESET_INDEX: usize = EV_EMU_NMI_INDEX + EV_EMU_NMI_LEN;
 const EV_EMU_IRQ_BRK_INDEX: usize = EV_EMU_RESET_INDEX + EV_EMU_RESET_LEN;
 
-/// LoRom specific values
-const LO_ROM_BANK_ADDR: u8 = 0x80; // LoRom starts at bank $808000 and is mirrored to $008000.
-const LO_ROM_BANK_SIZE_BYTES: usize = 32 * 1024; // LoRom, ExLoRom Bank size is 32 KiB
+/// Lo specific values
+const LO_ROM_BANK_ADDR: u8 = 0x80; // Lo starts at bank $808000 and is mirrored to $008000.
+const LO_ROM_BANK_SIZE_BYTES: usize = 32 * 1024; // Lo, ExLo Bank size is 32 KiB
 const LO_ROM_EXC_VECTOR_ADDR: usize = LO_ROM_BANK_SIZE_BYTES - EV_LEN_BYTES;
 const LO_ROM_HEADER_ADDR: usize = LO_ROM_EXC_VECTOR_ADDR - HDR_LEN_BYTES;
 const LO_ROM_EXT_HEADER_ADDR: usize = LO_ROM_HEADER_ADDR - OPT_HEADER_LEN_BYTES;
 
-/// HiRom specific values
-const HI_ROM_BANK_ADDR: u8 = 0xC0; // HiRom starts at bank $C00000 through to $FFFFFF.
-const HI_ROM_BANK_SIZE_BYTES: usize = 64 * 1024; // HiRom, ExHiRom Bank size is 64 KiB
+/// Hi specific values
+const HI_ROM_BANK_ADDR: u8 = 0xC0; // Hi starts at bank $C00000 through to $FFFFFF.
+const HI_ROM_BANK_SIZE_BYTES: usize = 64 * 1024; // Hi, ExHi Bank size is 64 KiB
 const HI_ROM_EXC_VECTOR_ADDR: usize = HI_ROM_BANK_SIZE_BYTES - EV_LEN_BYTES;
 const HI_ROM_HEADER_ADDR: usize = HI_ROM_EXC_VECTOR_ADDR - HDR_LEN_BYTES;
 const HI_ROM_EXT_HEADER_ADDR: usize = HI_ROM_HEADER_ADDR - OPT_HEADER_LEN_BYTES;
 
-/// ExHiRom specific values
+/// ExHi specific values
 const EX_HI_ROM_BANK_ADDR: usize = HI_ROM_BANK_ADDR as usize;
 const EX_HI_ROM_EXC_VECTOR_ADDR: usize =
     (4 * 1024 * 1024) + (HI_ROM_BANK_SIZE_BYTES - EV_LEN_BYTES); // Header starts at the end of the first bank after 4MiB.
@@ -115,7 +115,7 @@ const MAP_FASTROM_MASK: u8 = 0b00010000;
 const MAP_BASE_MASK: u8 = 0b00100000;
 
 /// Public constants
-pub const ROM_BASE_ADDR: u16 = 0x8000; // All LoRom banks, and mirrored banks of both Lo and HiRom fall under $XX8000. E.G.: Bank 0: $808000, Bank 1: $908000
+pub const ROM_BASE_ADDR: u16 = 0x8000; // All Lo banks, and mirrored banks of both Lo and Hi fall under $XX8000. E.G.: Bank 0: $808000, Bank 1: $908000
 pub const TOTAL_HDR_BYTES: usize = OPT_HEADER_LEN_BYTES + HDR_LEN_BYTES + EV_LEN_BYTES;
 
 /**************************************** Struct and Type definitions ***************************************************/
@@ -127,9 +127,9 @@ type ExceptionVectorTable = [u8; EV_LEN_BYTES];
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(usize)]
 pub enum RomSize {
-    LoRom   = LO_ROM_HEADER_ADDR,
-    HiRom   = HI_ROM_HEADER_ADDR,
-    ExHiRom = EX_HI_ROM_HEADER_ADDR,
+    Lo   = LO_ROM_HEADER_ADDR,
+    Hi   = HI_ROM_HEADER_ADDR,
+    ExHi = EX_HI_ROM_HEADER_ADDR,
 }
 const ROM_SIZE_NUM: usize = 3;
 
@@ -318,7 +318,7 @@ pub struct RomModeMapping {
 impl RomModeMapping {
     fn new() -> Self {
         Self {
-            mem_map: RomSize::LoRom,
+            mem_map: RomSize::Lo,
             speed: RomClkSpeed::SlowRom,
             sram_size: 0,
             region: RomRegion::None,
@@ -482,20 +482,20 @@ fn write_rom_to_memory(
     let bank_size: BankSize;
     let base_addr: usize;
     match mem_map {
-        RomSize::ExHiRom => {
+        RomSize::ExHi => {
             // Populate 0xC00000 - 0xFFFFFF, then wrap around and populate 0x3E8000 - 0x7DFFFF
             // TODO: https://github.com/HunterKing/RuSuper/issues/28
             num_banks = 0;
             bank_size = BankSize::Hi;
             base_addr = 0;
         }
-        RomSize::HiRom => {
+        RomSize::Hi => {
             // Populate 0xC00000 - 0xFFFFFF, then mirror half to 0x008000 - 3F8FFFF, and half to 0x808000 - 0xBF8000.
             num_banks = rom.capacity() / HI_ROM_BANK_SIZE_BYTES;
             bank_size = BankSize::Hi;
             base_addr = compose_address(HI_ROM_BANK_ADDR as u8, 0);
         }
-        RomSize::LoRom => {
+        RomSize::Lo => {
             // Populate 0x808000 - 0xFF8000, then mirror to 0x008000 - 0x7DFFFF
             num_banks = rom.capacity() / LO_ROM_BANK_SIZE_BYTES;
             bank_size = BankSize::Lo;
@@ -535,9 +535,9 @@ fn write_rom_mirror(
     let base_addrs: Vec<usize>;
     match mem_map {
         //TODO: https://github.com/HunterKing/RuSuper/issues/28
-        RomSize::ExHiRom => return Err(RomReadError::from("ExHiROM Mirror is unimplemented")),
-        RomSize::HiRom => {
-            // HiRom gets split across 2 areas of half-size banks.
+        RomSize::ExHi => return Err(RomReadError::from("ExHiROM Mirror is unimplemented")),
+        RomSize::Hi => {
+            // Hi gets split across 2 areas of half-size banks.
             bank_clusters = vec![
                 rom.capacity() / HI_ROM_BANK_SIZE_BYTES,
                 rom.capacity() / HI_ROM_BANK_SIZE_BYTES,
@@ -547,8 +547,8 @@ fn write_rom_mirror(
                 memory::compose_address(LO_ROM_BANK_ADDR, ROM_BASE_ADDR),
             ]
         }
-        RomSize::LoRom => {
-            // LoRom gets written contiguously across 0x008000 - 0x7DFFFF.
+        RomSize::Lo => {
+            // Lo gets written contiguously across 0x008000 - 0x7DFFFF.
             // We'll let this write through 7E-7F because those will be reset on RAM init anyways.
             bank_clusters = vec![rom.capacity() / LO_ROM_BANK_SIZE_BYTES];
             base_addrs = vec![memory::MEMORY_START];
@@ -592,9 +592,7 @@ fn write_rom_mirror(
 ///     - `Ok()`:           If written Ok.
 ///     - `RomReadError`:   If process failed.
 fn _write_ex_hi_rom(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
-    return Err(RomReadError::from(String::from(
-        "Unimplemented for ExHiRom",
-    )));
+    return Err(RomReadError::from(String::from("Unimplemented for ExHi")));
 }
 
 /// Write an exhirom mirror into memory.
@@ -610,9 +608,7 @@ fn _write_ex_hi_rom(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), R
 fn _write_ex_hi_rom_mirror(
     rom: &Vec<u8>, mem_ptr: &mut memory::Memory,
 ) -> Result<(), RomReadError> {
-    return Err(RomReadError::from(String::from(
-        "Unimplemented for ExHiRom",
-    )));
+    return Err(RomReadError::from(String::from("Unimplemented for ExHi")));
 }
 
 /// Find and grab the header from target rom if available.
@@ -664,7 +660,7 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
         }
     }
 
-    const ROM_OPTIONS: [RomSize; ROM_SIZE_NUM] = [RomSize::ExHiRom, RomSize::HiRom, RomSize::LoRom];
+    const ROM_OPTIONS: [RomSize; ROM_SIZE_NUM] = [RomSize::ExHi, RomSize::Hi, RomSize::Lo];
     for size in ROM_OPTIONS.iter() {
         // Screen whether the ROM can even fit in the area that the header would be in.
         if rom.capacity() > *size as usize {
@@ -699,9 +695,9 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) {
     let header_addr: usize;
     match &data.mode.mem_map {
-        RomSize::LoRom => header_addr = LO_ROM_EXT_HEADER_ADDR,
-        RomSize::HiRom => header_addr = HI_ROM_EXT_HEADER_ADDR,
-        RomSize::ExHiRom => header_addr = EX_HI_ROM_EXT_HEADER_ADDR,
+        RomSize::Lo => header_addr = LO_ROM_EXT_HEADER_ADDR,
+        RomSize::Hi => header_addr = HI_ROM_EXT_HEADER_ADDR,
+        RomSize::ExHi => header_addr = EX_HI_ROM_EXT_HEADER_ADDR,
     }
 
     if data.header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT {
@@ -783,9 +779,9 @@ fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
 fn fetch_exception_vectors(rom: &Vec<u8>, data: &mut RomData) {
     let header_addr: usize;
     match &data.mode.mem_map {
-        RomSize::LoRom => header_addr = LO_ROM_EXC_VECTOR_ADDR,
-        RomSize::HiRom => header_addr = HI_ROM_EXC_VECTOR_ADDR,
-        RomSize::ExHiRom => header_addr = EX_HI_ROM_EXC_VECTOR_ADDR,
+        RomSize::Lo => header_addr = LO_ROM_EXC_VECTOR_ADDR,
+        RomSize::Hi => header_addr = HI_ROM_EXC_VECTOR_ADDR,
+        RomSize::ExHi => header_addr = EX_HI_ROM_EXC_VECTOR_ADDR,
     }
     data.exception_vectors
         .clone_from_slice(&rom[header_addr..header_addr + EV_LEN_BYTES]);
@@ -816,13 +812,13 @@ fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError
         // This rom looks good. Get the size of the rom and throw it back out.
         let rom_map_mode: u8 = header[HDR_MAP_MODE_INDEX];
         if (rom_map_mode & MAP_EXHIROM_MASK) != 0 {
-            retval = Ok(RomSize::ExHiRom);
+            retval = Ok(RomSize::ExHi);
         }
         else if (rom_map_mode & MAP_HIROM_MASK) != 0 {
-            retval = Ok(RomSize::HiRom);
+            retval = Ok(RomSize::Hi);
         }
         else if (rom_map_mode & MAP_BASE_MASK) != 0 {
-            retval = Ok(RomSize::LoRom);
+            retval = Ok(RomSize::Lo);
         }
         else {
             retval = Err(RomReadError::from(
@@ -862,9 +858,9 @@ mod tests {
         // Set the map value to match the expected result.
         let header_map_value: u8;
         match expected_result {
-            RomSize::LoRom => header_map_value = LOROM_VALUE,
-            RomSize::HiRom => header_map_value = HIROM_VALUE,
-            RomSize::ExHiRom => header_map_value = EXHIROM_VALUE,
+            RomSize::Lo => header_map_value = LOROM_VALUE,
+            RomSize::Hi => header_map_value = HIROM_VALUE,
+            RomSize::ExHi => header_map_value = EXHIROM_VALUE,
         }
         test_header[HDR_MAP_MODE_INDEX] = header_map_value;
 
@@ -885,7 +881,7 @@ mod tests {
     /// # Parameters:
     ///     - `expected_type`:  Type of ROM to generate and test for optional header (Lo, Hi, ExHi).
     fn test_fetch_optional_header(expected_type: RomSize) {
-        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
+        // This will generate a huge ExHi (4 MiB + 64KiB) and take a while.
         let mut test_rom: Box<[u8; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]> =
             vec![0; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]
                 .into_boxed_slice()
@@ -901,9 +897,9 @@ mod tests {
         // Use the expected size to pass to fetch_opt_header to test against.
         let header_location: usize;
         match expected_type {
-            RomSize::LoRom => header_location = LO_ROM_EXT_HEADER_ADDR,
-            RomSize::HiRom => header_location = HI_ROM_EXT_HEADER_ADDR,
-            RomSize::ExHiRom => header_location = EX_HI_ROM_EXT_HEADER_ADDR,
+            RomSize::Lo => header_location = LO_ROM_EXT_HEADER_ADDR,
+            RomSize::Hi => header_location = HI_ROM_EXT_HEADER_ADDR,
+            RomSize::ExHi => header_location = EX_HI_ROM_EXT_HEADER_ADDR,
         }
         fetch_opt_header(&test_rom.to_vec(), &mut data);
 
@@ -917,7 +913,7 @@ mod tests {
     /// # Parameters:
     ///     - `expected_type`: Type of ROM to generate and test (Lo, Hi, ExHi).
     fn test_fetch_exception_headers(expected_type: RomSize) {
-        // This will generate a huge ExHiRom (4 MiB + 64KiB) and take a while.
+        // This will generate a huge ExHi (4 MiB + 64KiB) and take a while.
         let mut test_rom: Box<[u8; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]> =
             vec![0; EX_HI_ROM_EXC_VECTOR_ADDR + EV_LEN_BYTES]
                 .into_boxed_slice()
@@ -931,9 +927,9 @@ mod tests {
 
         let header_location: usize;
         match expected_type {
-            RomSize::LoRom => header_location = LO_ROM_EXC_VECTOR_ADDR,
-            RomSize::HiRom => header_location = HI_ROM_EXC_VECTOR_ADDR,
-            RomSize::ExHiRom => header_location = EX_HI_ROM_EXC_VECTOR_ADDR,
+            RomSize::Lo => header_location = LO_ROM_EXC_VECTOR_ADDR,
+            RomSize::Hi => header_location = HI_ROM_EXC_VECTOR_ADDR,
+            RomSize::ExHi => header_location = EX_HI_ROM_EXC_VECTOR_ADDR,
         }
         fetch_exception_vectors(&test_rom.to_vec(), &mut data);
 
@@ -956,9 +952,9 @@ mod tests {
         // Set the map mode to the target type.
         let hdr_byte_index: usize = mem_map as usize;
         match mem_map {
-            RomSize::LoRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = LOROM_VALUE,
-            RomSize::HiRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = HIROM_VALUE,
-            RomSize::ExHiRom => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = EXHIROM_VALUE,
+            RomSize::Lo => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = LOROM_VALUE,
+            RomSize::Hi => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = HIROM_VALUE,
+            RomSize::ExHi => test_rom[hdr_byte_index + HDR_MAP_MODE_INDEX] = EXHIROM_VALUE,
         }
 
         // Zero the checksum values, as we will have to recompute at the end.
@@ -1004,17 +1000,14 @@ mod tests {
 
         #[test]
         fn test_lorom_checksum() {
-            assert_eq!(
-                RomSize::LoRom,
-                test_checksum_result(RomSize::LoRom).unwrap()
-            );
+            assert_eq!(RomSize::Lo, test_checksum_result(RomSize::Lo).unwrap());
         }
 
         #[test]
-        fn test_fetch_optional_lorom() { test_fetch_optional_header(RomSize::LoRom); }
+        fn test_fetch_optional_lorom() { test_fetch_optional_header(RomSize::Lo); }
 
         #[test]
-        fn test_fetch_exception_headers_lorom() { test_fetch_exception_headers(RomSize::LoRom); }
+        fn test_fetch_exception_headers_lorom() { test_fetch_exception_headers(RomSize::Lo); }
     }
 
     mod hirom_tests {
@@ -1022,17 +1015,14 @@ mod tests {
 
         #[test]
         fn test_hirom_checksum() {
-            assert_eq!(
-                RomSize::HiRom,
-                test_checksum_result(RomSize::HiRom).unwrap()
-            );
+            assert_eq!(RomSize::Hi, test_checksum_result(RomSize::Hi).unwrap());
         }
 
         #[test]
-        fn test_fetch_optional_hirom() { test_fetch_optional_header(RomSize::HiRom); }
+        fn test_fetch_optional_hirom() { test_fetch_optional_header(RomSize::Hi); }
 
         #[test]
-        fn test_fetch_exception_headers_hirom() { test_fetch_exception_headers(RomSize::HiRom); }
+        fn test_fetch_exception_headers_hirom() { test_fetch_exception_headers(RomSize::Hi); }
     }
 
     mod exhirom_tests {
@@ -1040,19 +1030,14 @@ mod tests {
 
         #[test]
         fn test_exhirom_checksum() {
-            assert_eq!(
-                RomSize::ExHiRom,
-                test_checksum_result(RomSize::ExHiRom).unwrap()
-            );
+            assert_eq!(RomSize::ExHi, test_checksum_result(RomSize::ExHi).unwrap());
         }
 
         #[test]
-        fn test_fetch_optional_exhirom() { test_fetch_optional_header(RomSize::ExHiRom); }
+        fn test_fetch_optional_exhirom() { test_fetch_optional_header(RomSize::ExHi); }
 
         #[test]
-        fn test_fetch_exception_headers_exhirom() {
-            test_fetch_exception_headers(RomSize::ExHiRom);
-        }
+        fn test_fetch_exception_headers_exhirom() { test_fetch_exception_headers(RomSize::ExHi); }
     }
 
     #[test]
@@ -1063,7 +1048,7 @@ mod tests {
         let mut test_header: Header = rand::thread_rng().gen();
         let mut checksum: u16 = 0;
 
-        // Test LoRom Detection.
+        // Test Lo Detection.
         test_header[HDR_MAP_MODE_INDEX] = INVALID_MAP_VALUE;
         for byte in test_header.iter() {
             checksum += *byte as u16;
@@ -1098,12 +1083,12 @@ mod tests {
         const HALF_STEP: usize = 512 * 1024;
 
         // Test all roms which would be unevenly stacked.
-        fetch_header_for_misaligned_rom(RomSize::LoRom, HALF_STEP * 3); // 1.5 MiB (1MiB + 512KiB)
-                                                                        // 2.0 MiB IS a power of 2.
-        fetch_header_for_misaligned_rom(RomSize::LoRom, HALF_STEP * 5); // 2.5 MiB (2MiB + 512KiB)
-        fetch_header_for_misaligned_rom(RomSize::LoRom, HALF_STEP * 6); // 3.0 MiB (2MiB + 1MiB)
-                                                                        // 3.5 MiB is not a valid configuration.
-                                                                        // TODO: The ExHiROM variants are as-yet untested, because the ExHiRom functionality is not present.
-                                                                        // https://github.com/HunterKing/RuSuper/issues/28
+        fetch_header_for_misaligned_rom(RomSize::Lo, HALF_STEP * 3); // 1.5 MiB (1MiB + 512KiB)
+                                                                     // 2.0 MiB IS a power of 2.
+        fetch_header_for_misaligned_rom(RomSize::Lo, HALF_STEP * 5); // 2.5 MiB (2MiB + 512KiB)
+        fetch_header_for_misaligned_rom(RomSize::Lo, HALF_STEP * 6); // 3.0 MiB (2MiB + 1MiB)
+                                                                     // 3.5 MiB is not a valid configuration.
+                                                                     // TODO: The ExHiROM variants are as-yet untested, because the ExHi functionality is not present.
+                                                                     // https://github.com/HunterKing/RuSuper/issues/28
     }
 }
