@@ -1346,15 +1346,15 @@ pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
 /**************************************** Public Functions **************************************************************/
 
 /// Fetch an instruction from memory.
-/// An instruction can be an 8-bit or a 16-bit one. We will just widen if it is 8-bit.
+/// An instruction can be 8-bit or a 16-bit. We will just widen if it is 8-bit.
 /// # Parameters
 ///     - `self`
 ///     - `memory`: Pointer to memory object to read data from.
 /// # Returns
 ///     - `CpuInstruction`:     Decoded CPU instruction from the table.
-pub(super) fn fetch_and_decode(p_state: &mut CpuState, p_mem: &memory::Memory) -> CpuInstruction {
-    let address = memory::compose_address(p_state.prog_bank, p_state.pc);
-    INSTRUCTION_MAP[p_mem.get_byte(address).unwrap() as usize]
+pub(super) fn fetch_and_decode(cpu: &mut CpuState, memory: &memory::Memory) -> CpuInstruction {
+    let address = cpu.get_pc();
+    INSTRUCTION_MAP[memory.get_byte(address).unwrap() as usize]
 }
 
 /// Execute an instruction.
@@ -1366,22 +1366,21 @@ pub(super) fn fetch_and_decode(p_state: &mut CpuState, p_mem: &memory::Memory) -
 ///     - true:      If continuing running
 ///     - false:     If a BRK or STP has been reached.
 pub(super) fn execute(
-    p_state: &mut CpuState, inst: CpuInstruction, p_mem: &mut memory::Memory,
+    cpu: &mut CpuState, inst: CpuInstruction, memory: &mut memory::Memory,
 ) -> bool {
-    let parameter_location: usize =
-        memory::compose_address(p_state.prog_bank, p_state.pc + INST_PARAM_OFFSET);
+    let parameter_location: usize = cpu.get_pc() + INST_PARAM_OFFSET as usize;
     let pc_addr_increment: u16 = inst.width as u16;
 
     let parameter_value = match inst.width {
         CpuParamWidth::NO => 0,
-        CpuParamWidth::_SHORT => p_mem.get_byte(parameter_location).unwrap() as u16,
-        CpuParamWidth::_LONG => p_mem.get_word(parameter_location).unwrap(),
+        CpuParamWidth::_SHORT => memory.get_byte(parameter_location).unwrap() as u16,
+        CpuParamWidth::_LONG => memory.get_word(parameter_location).unwrap(),
     };
 
     // Call the function to execute.
     println!("Executing {:?} with width {:?}", inst.opcode, inst.width);
-    let continue_run = (inst.function)(p_state, p_mem, parameter_value);
-    p_state.pc += pc_addr_increment;
+    let continue_run = (inst.function)(cpu, memory, parameter_value);
+    cpu.registers.step_pc(pc_addr_increment);
 
     continue_run
 }
