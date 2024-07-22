@@ -34,9 +34,9 @@ impl CpuRegisters {
             stack_ptr: Wrapping(0),
             data_bank: Wrapping(0),
             direct_page: Wrapping(0),
-            program_bank: Wrapping(0),
+            program_bank: Wrapping(0x80),
             processor_status: StatusRegister::new(),
-            pc: Wrapping(0),
+            pc: Wrapping(0x8000),
         }
     }
 

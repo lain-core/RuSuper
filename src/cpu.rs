@@ -12,7 +12,7 @@ mod registers;
 /// Virtualized representation of the CPU internally.
 #[derive(Debug)]
 pub struct CpuState {
-    pub registers: CpuRegisters,
+    pub(self) registers: CpuRegisters,
     pub cycles_to_pend: u8, // Number of cycles to pend before running next operation.
 }
 
