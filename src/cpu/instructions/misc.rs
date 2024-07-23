@@ -10,9 +10,9 @@ use super::*;
 ///
 /// # Returns
 ///     - false (stop running).
-pub(super) fn stp(state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> bool {
+pub(super) fn stp(state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> Option<u8> {
     state.cycles_to_pend = 3;
-    false
+    None
 }
 
 /// Implementation of NOP instruction
@@ -25,7 +25,6 @@ pub(super) fn stp(state: &mut CpuState, _memory: &mut memory::Memory, _param: u1
 ///
 /// # Returns
 ///     - true (continue running).
-pub(super) fn nop(state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> bool {
-    state.cycles_to_pend = 2;
-    true
+pub(super) fn nop(_state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> Option<u8> {
+    Some(2)
 }
