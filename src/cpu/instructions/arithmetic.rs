@@ -16,43 +16,65 @@ use super::{
 /// Opcode: 0x6D
 /// Bytes:  2 if 8-bit param, 3 if 16-bit
 /// Flags affected: nv----zc
-pub(super) fn adc_immediate(cpu: &mut CpuState, _memory: &mut memory::Memory, param: u16) -> bool {
-    // If the carry flag is already set
+pub(super) fn adc_immediate(
+    cpu: &mut CpuState, _memory: &mut memory::Memory, mut param: u16,
+) -> bool {
+    // If the carry flag is already set then carry it forward
+    if cpu.registers.status.flags[registers::STATUS_CARRY_BIT] == true {
+        param += 1;
+    }
 
     // If the operation is in 8-bit mode, then perform all of the math in a u8 context.
-    if cpu.registers.status.flags[registers::STATUS_AREG_SIZE_BIT] as usize
-        == registers::REGISTER_MODE_8_BIT
-    {
-        let acc_value: u8 = (cpu.registers.acc.0 & 0x00FF) as u8;
-        let param_value: u8 = (param & 0x00FF) as u8;
-        match acc_value.checked_add(param_value) {
-            Some(value) => {
-                cpu.registers.acc = Wrapping(value as u16);
-                cpu.registers.status.flags[registers::STATUS_CARRY_BIT] = false;
+    match cpu.registers.status.flags[registers::STATUS_AREG_SIZE_BIT] {
+        registers::REGISTER_MODE_8_BIT => {
+            let acc_value: u8 = (cpu.registers.acc.0 & 0x00FF) as u8;
+            let param_value: u8 = (param & 0x00FF) as u8;
+
+            // Check if an unsigned overflow occurred. If it did, then set the carry bit.
+            match acc_value.checked_add(param_value) {
+                Some(_value) => {
+                    cpu.registers.status.flags[registers::STATUS_CARRY_BIT] = false;
+                }
+                None => {
+                    cpu.registers.status.flags[registers::STATUS_CARRY_BIT] = true;
+                }
             }
-            None => {
-                //     (((acc_value + param_value) as u16 & (1 << ALU_8BIT_CARRY_BIT))
-                //         >> ALU_8BIT_CARRY_BIT)
-                //         != 0;
-                cpu.registers.acc = Wrapping(acc_value.wrapping_add(param_value) as u16);
-                cpu.registers.status.flags[registers::STATUS_CARRY_BIT] = true;
+
+            // Check if a signed overflow occurred. If it did, then set the overflow bit.
+            // http://www.6502.org/tutorials/vflag.html
+            match (acc_value as i8).checked_add(param_value as i8) {
+                Some(_value) => {
+                    cpu.registers.status.flags[registers::STATUS_OVERFLOW_BIT] = false;
+                }
+                None => {
+                    cpu.registers.status.flags[registers::STATUS_OVERFLOW_BIT] = true;
+                }
             }
+
+            cpu.registers.acc = Wrapping(acc_value.wrapping_add(param_value) as u16);
         }
-    }
-    // If the operation is in 16-bit mode, perform the math that way.
-    else {
-        match cpu.registers.acc.0.checked_add(param) {
-            Some(value) => {
-                cpu.registers.acc = Wrapping(value);
-                cpu.registers.status.flags[registers::STATUS_CARRY_BIT] = false;
+        registers::REGISTER_MODE_16_BIT => {
+            // Check if an unsigned overflow occurred and set the carry bit if needed
+            match cpu.registers.acc.0.checked_add(param) {
+                Some(_value) => {
+                    cpu.registers.status.flags[registers::STATUS_CARRY_BIT] = false;
+                }
+                None => {
+                    cpu.registers.status.flags[registers::STATUS_CARRY_BIT] = true;
+                }
             }
-            None => {
-                // ((cpu.registers.acc + Wrapping(param)).0 as u32
-                //     & (1 << ALU_16BIT_CARRY_BIT) >> ALU_16BIT_CARRY_BIT)
-                //     != 0;
-                cpu.registers.acc += Wrapping(param);
-                cpu.registers.status.flags[registers::STATUS_CARRY_BIT] = true;
+
+            // Check if a signed overflow occurred and set the carry bit if needed.
+            match (cpu.registers.acc.0 as i16).checked_add(param as i16) {
+                Some(_value) => {
+                    cpu.registers.status.flags[registers::STATUS_OVERFLOW_BIT] = false;
+                }
+                None => {
+                    cpu.registers.status.flags[registers::STATUS_OVERFLOW_BIT] = true;
+                }
             }
+
+            cpu.registers.acc += Wrapping(param);
         }
     }
 
@@ -67,11 +89,62 @@ pub(super) fn adc_immediate(cpu: &mut CpuState, _memory: &mut memory::Memory, pa
 
 #[cfg(test)]
 mod tests {
+    use memory::Memory;
+    use registers::CpuRegisters;
+
+    use crate::cpu::instructions::arithmetic::adc_immediate;
+
     use super::*;
 
     #[test]
-    fn adc_immediate() {
-        panic!("Unimplemented");
+    fn test_adc_immediate_8bit() {
+        let test_cases = vec![
+            //ACC +  B =  C,         n, v, z, c
+            [0x0001, 0x0001, 0x0002, 0, 0, 0, 0],
+            [0x007F, 0x0082, 0x0001, 0, 0, 0, 1],
+            [0x0000, 0x0000, 0x0000, 0, 0, 1, 0],
+            [0x0001, 0x00FF, 0x0000, 0, 0, 1, 1],
+            [0x007F, 0x0001, 0x0080, 1, 1, 0, 0],
+            [0x00FF, 0x0001, 0x0000, 0, 0, 1, 1],
+        ];
+
+        for case in test_cases {
+            let mut test_cpu: CpuState = CpuState::new();
+            let mut test_memory: Memory = Memory::new();
+            test_cpu.registers.status.flags[registers::STATUS_AREG_SIZE_BIT] =
+                registers::REGISTER_MODE_8_BIT;
+            test_cpu.registers.acc = Wrapping(case[0]);
+
+            println!("Test case: {:?}", case);
+
+            // Perform the operation.
+            adc_immediate(&mut test_cpu, &mut test_memory, case[1]);
+
+            // Check the outcome.
+            print!("Testing output value. ");
+            assert_eq!(test_cpu.registers.acc, Wrapping(case[2]));
+            // Check the flags.
+            print!("Testing Flags: n, ");
+            assert_eq!(
+                case[3],
+                test_cpu.registers.status.flags[registers::STATUS_NEGATIVE_BIT] as u16
+            );
+            print!("v, ");
+            assert_eq!(
+                case[4],
+                test_cpu.registers.status.flags[registers::STATUS_OVERFLOW_BIT] as u16
+            );
+            print!("z, ");
+            assert_eq!(
+                case[5],
+                test_cpu.registers.status.flags[registers::STATUS_ZERO_BIT] as u16
+            );
+            println!("c.");
+            assert_eq!(
+                case[6],
+                test_cpu.registers.status.flags[registers::STATUS_CARRY_BIT] as u16
+            );
+        }
     }
 }
 

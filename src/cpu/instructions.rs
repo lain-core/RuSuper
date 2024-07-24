@@ -11,16 +11,6 @@ const NUM_INSTRUCTIONS: usize = 256;
 /// Parameter for an offset is always instruction + 1.
 const INST_PARAM_OFFSET: u16 = 1;
 
-/// Number of bytes to increment the PC by for an instruction.
-/// Instruction is only one byte long.
-const PC_INCREMENT_NO_ARG: u16 = 1;
-
-/// Instruction takes an 8-bit parameter.
-const PC_INCREMENT_SHORT_ARG: u16 = 2;
-
-/// Instruction takes a  16-bit parameter.
-const PC_INCREMENT_LONG_ARG: u16 = 3;
-
 /**************************************** Struct and Type definitions ***************************************************/
 /// Enumerated type to match to an opcode. Useful for debugging because it can be represented easily as a string.
 #[derive(Debug, Clone, Copy)]
@@ -43,7 +33,6 @@ pub(super) struct CpuInstruction {
     opcode: CpuOpcode,
     function: CpuInstructionFn,
 }
-
 
 /// Map of the cpu opcodes.
 /// Would prefer this to be a hashmap, but rust cannot generate a HashMap::From() as const, and a global cannot be declared using `let`.

@@ -26,8 +26,8 @@ pub(super) const STATUS_NEGATIVE_BIT: usize = 7;
 pub(super) const ALU_8BIT_CARRY_BIT: usize = 8;
 pub(super) const ALU_16BIT_CARRY_BIT: usize = 16;
 
-pub(super) const REGISTER_MODE_16_BIT: usize = 0;
-pub(super) const REGISTER_MODE_8_BIT: usize = 1;
+pub(super) const REGISTER_MODE_16_BIT: bool = false;
+pub(super) const REGISTER_MODE_8_BIT: bool = true;
 
 /**************************************** Struct and Type definitions ***************************************************/
 /// CPU Register fields.
@@ -76,7 +76,9 @@ impl CpuRegisters {
     }
 
     /// Step the PC by `count` steps.
-    pub fn step_pc(&mut self, count: u16) { self.pc += count }
+    pub fn step_pc(&mut self, count: u16) {
+        self.pc += count
+    }
 }
 
 /// Status Register.
