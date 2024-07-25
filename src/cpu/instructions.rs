@@ -1,4 +1,4 @@
-mod arithmetic;
+mod adc;
 mod branch;
 mod misc;
 
@@ -15,6 +15,7 @@ const INST_PARAM_OFFSET: u16 = 1;
 /// Enumerated type to match to an opcode. Useful for debugging because it can be represented easily as a string.
 #[derive(Debug, Clone, Copy)]
 pub enum CpuOpcode {
+    ADC,
     STP,
     NOP,
     // Many More
@@ -462,8 +463,8 @@ pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
         function: misc::stp,
     }, /* 0x69 */
     CpuInstruction {
-        opcode: CpuOpcode::STP,
-        function: misc::stp,
+        opcode: CpuOpcode::ADC,
+        function: adc::immediate,
     }, /* 0x6A */
     CpuInstruction {
         opcode: CpuOpcode::STP,

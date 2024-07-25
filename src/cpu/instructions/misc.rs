@@ -9,9 +9,8 @@ use super::*;
 ///     - `param`   Unused.
 ///
 /// # Returns
-///     - false (stop running).
-pub(super) fn stp(state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> Option<u8> {
-    state.cycles_to_pend = 3;
+///     - None (stop running).
+pub(super) fn stp(_state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> Option<u8> {
     None
 }
 

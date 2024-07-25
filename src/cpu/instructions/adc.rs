@@ -7,18 +7,20 @@ use std::num::Wrapping;
 
 use super::{
     memory,
-    registers::{self, ALU_16BIT_CARRY_BIT, ALU_8BIT_CARRY_BIT},
+    registers::{
+        self, ALU_16BIT_CARRY_BIT, ALU_8BIT_CARRY_BIT, REGISTER_MODE_16_BIT, REGISTER_MODE_8_BIT,
+    },
     CpuState,
 };
 
-/// Name:   ADC Immediate
+/// ADC Immediate
 /// Syntax: ADC #const
-/// Opcode: 0x6D
+/// Opcode: 0x69
 /// Bytes:  2 if 8-bit param, 3 if 16-bit
 /// Flags affected: nv----zc
-pub(super) fn adc_immediate(
+pub(super) fn immediate(
     cpu: &mut CpuState, _memory: &mut memory::Memory, mut param: u16,
-) -> bool {
+) -> Option<u8> {
     // If the carry flag is already set then carry it forward
     if cpu.registers.status.flags[registers::STATUS_CARRY_BIT] == true {
         param += 1;
@@ -82,22 +84,25 @@ pub(super) fn adc_immediate(
     cpu.registers.status.flags[registers::STATUS_ZERO_BIT] = cpu.registers.acc.0 == 0;
     cpu.registers.status.flags[registers::STATUS_NEGATIVE_BIT] =
         (cpu.registers.acc.0 >> registers::STATUS_NEGATIVE_BIT as u16) != 0;
-    true
+
+    // Return the number of cycles to pend.
+    match cpu.registers.status.flags[registers::STATUS_AREG_SIZE_BIT] {
+        REGISTER_MODE_8_BIT => Some(2),
+        REGISTER_MODE_16_BIT => Some(3),
+    }
 }
 
 /**************************************** Tests *************************************************************************/
 
 #[cfg(test)]
 mod tests {
+    use crate::cpu::instructions::adc;
     use memory::Memory;
-    use registers::CpuRegisters;
-
-    use crate::cpu::instructions::arithmetic::adc_immediate;
 
     use super::*;
 
     #[test]
-    fn test_adc_immediate_8bit() {
+    fn test_immediate_8bit() {
         // TODO: Check whether e.g. 0xFF + 0x01 would result in 0x0100 being stored into the ACC
         // even if we are in 8-bit mode.
         let test_cases = vec![
@@ -120,7 +125,7 @@ mod tests {
             println!("Test case: {:?}", case);
 
             // Perform the operation.
-            adc_immediate(&mut test_cpu, &mut test_memory, case[1]);
+            adc::immediate(&mut test_cpu, &mut test_memory, case[1]);
 
             // Check the outcome.
             print!("Testing output value. ");
@@ -150,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn test_adc_immediate_16bit() {
+    fn test_immediate_16bit() {
         let test_cases = vec![
             //ACC +  B =  C,         n, v, z, c
             [0x0001, 0x0001, 0x0002, 0, 0, 0, 0],
@@ -170,7 +175,7 @@ mod tests {
             println!("Test case: {:?}", case);
 
             // Perform the operation.
-            adc_immediate(&mut test_cpu, &mut test_memory, case[1]);
+            adc::immediate(&mut test_cpu, &mut test_memory, case[1]);
 
             // Check the outcome.
             print!("Testing output value. ");
