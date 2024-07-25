@@ -98,6 +98,8 @@ mod tests {
 
     #[test]
     fn test_adc_immediate_8bit() {
+        // TODO: Check whether e.g. 0xFF + 0x01 would result in 0x0100 being stored into the ACC
+        // even if we are in 8-bit mode.
         let test_cases = vec![
             //ACC +  B =  C,         n, v, z, c
             [0x0001, 0x0001, 0x0002, 0, 0, 0, 0],
@@ -105,7 +107,7 @@ mod tests {
             [0x0000, 0x0000, 0x0000, 0, 0, 1, 0],
             [0x0001, 0x00FF, 0x0000, 0, 0, 1, 1],
             [0x007F, 0x0001, 0x0080, 1, 1, 0, 0],
-            [0x00FF, 0x0001, 0x0000, 0, 0, 1, 1],
+            [0x0080, 0x0001, 0x0081, 1, 0, 0, 0],
         ];
 
         for case in test_cases {
@@ -113,6 +115,56 @@ mod tests {
             let mut test_memory: Memory = Memory::new();
             test_cpu.registers.status.flags[registers::STATUS_AREG_SIZE_BIT] =
                 registers::REGISTER_MODE_8_BIT;
+            test_cpu.registers.acc = Wrapping(case[0]);
+
+            println!("Test case: {:?}", case);
+
+            // Perform the operation.
+            adc_immediate(&mut test_cpu, &mut test_memory, case[1]);
+
+            // Check the outcome.
+            print!("Testing output value. ");
+            assert_eq!(test_cpu.registers.acc, Wrapping(case[2]));
+            // Check the flags.
+            print!("Testing Flags: n, ");
+            assert_eq!(
+                case[3],
+                test_cpu.registers.status.flags[registers::STATUS_NEGATIVE_BIT] as u16
+            );
+            print!("v, ");
+            assert_eq!(
+                case[4],
+                test_cpu.registers.status.flags[registers::STATUS_OVERFLOW_BIT] as u16
+            );
+            print!("z, ");
+            assert_eq!(
+                case[5],
+                test_cpu.registers.status.flags[registers::STATUS_ZERO_BIT] as u16
+            );
+            println!("c.");
+            assert_eq!(
+                case[6],
+                test_cpu.registers.status.flags[registers::STATUS_CARRY_BIT] as u16
+            );
+        }
+    }
+
+    #[test]
+    fn test_adc_immediate_16bit() {
+        let test_cases = vec![
+            //ACC +  B =  C,         n, v, z, c
+            [0x0001, 0x0001, 0x0002, 0, 0, 0, 0],
+            [0xFFFF, 0x0002, 0x0001, 0, 0, 0, 1],
+            [0xFFFF, 0x0001, 0x0000, 0, 0, 1, 1],
+            [0x7FFF, 0x0001, 0x8000, 1, 1, 0, 0],
+            [0x8000, 0x0001, 0x8001, 1, 0, 0, 0],
+        ];
+
+        for case in test_cases {
+            let mut test_cpu: CpuState = CpuState::new();
+            let mut test_memory: Memory = Memory::new();
+            test_cpu.registers.status.flags[registers::STATUS_AREG_SIZE_BIT] =
+                registers::REGISTER_MODE_16_BIT;
             test_cpu.registers.acc = Wrapping(case[0]);
 
             println!("Test case: {:?}", case);
