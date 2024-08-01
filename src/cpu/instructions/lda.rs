@@ -5,23 +5,27 @@ use super::{
 };
 use std::num::Wrapping;
 
+/**************************************** File Scope Functions **********************************************************/
+
+/**************************************** Public Functions **************************************************************/
+
 /// LDA absolute
 /// Syntax: LDA #const
 /// Opcode: 0xA9
 /// Bytes: 2 for 8-bit, 3 for 16-bit
 /// Flags affected: n-----z-
 pub(super) fn immediate(cpu: &mut CpuState, _mem: &mut Memory, param: u16) -> Option<u8> {
-    match cpu.registers.status.get_flag(StatusFlags::AccSize) {
+    match cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => {
             let masked_param = param & 0x00FF;
             cpu.registers.acc = Wrapping(masked_param as u16);
 
             match cpu.registers.acc.0 as i8 >= 0 {
                 true => {
-                    cpu.registers.status.clear_flag(StatusFlags::Negative);
+                    cpu.registers.clear_flag(StatusFlags::Negative);
                 }
                 false => {
-                    cpu.registers.status.set_flag(StatusFlags::Negative);
+                    cpu.registers.set_flag(StatusFlags::Negative);
                 }
             }
         }
@@ -30,10 +34,10 @@ pub(super) fn immediate(cpu: &mut CpuState, _mem: &mut Memory, param: u16) -> Op
 
             match cpu.registers.acc.0 as i16 >= 0 {
                 true => {
-                    cpu.registers.status.clear_flag(StatusFlags::Negative);
+                    cpu.registers.clear_flag(StatusFlags::Negative);
                 }
                 false => {
-                    cpu.registers.status.set_flag(StatusFlags::Negative);
+                    cpu.registers.set_flag(StatusFlags::Negative);
                 }
             }
         }
@@ -42,14 +46,14 @@ pub(super) fn immediate(cpu: &mut CpuState, _mem: &mut Memory, param: u16) -> Op
     // Update the flags.
     match cpu.registers.acc.0 == 0 {
         true => {
-            cpu.registers.status.set_flag(StatusFlags::Zero);
+            cpu.registers.set_flag(StatusFlags::Zero);
         }
         false => {
-            cpu.registers.status.clear_flag(StatusFlags::Zero);
+            cpu.registers.clear_flag(StatusFlags::Zero);
         }
     }
 
-    match cpu.registers.status.get_flag(StatusFlags::AccSize) {
+    match cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => Some(2),
         REGISTER_MODE_16_BIT => Some(3),
     }
@@ -75,7 +79,7 @@ mod tests {
 
         let mut test_cpu = CpuState::new();
         let mut test_mem = Memory::new();
-        test_cpu.registers.status.set_flag(StatusFlags::AccSize);
+        test_cpu.registers.set_flag(StatusFlags::AccSize);
 
         for case in test_cases {
             lda::immediate(&mut test_cpu, &mut test_mem, case[0]);
@@ -88,12 +92,12 @@ mod tests {
             print!("n, ");
             assert_eq!(
                 case[1],
-                test_cpu.registers.status.get_flag(StatusFlags::Negative) as u16
+                test_cpu.registers.get_flag(StatusFlags::Negative) as u16
             );
             println!("z");
             assert_eq!(
                 case[2],
-                test_cpu.registers.status.get_flag(StatusFlags::Zero) as u16
+                test_cpu.registers.get_flag(StatusFlags::Zero) as u16
             );
         }
     }

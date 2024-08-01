@@ -461,12 +461,12 @@ pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
         function: misc::stp,
     }, /* 0x68 */
     CpuInstruction {
-        opcode: CpuOpcode::STP,
-        function: misc::stp,
-    }, /* 0x69 */
-    CpuInstruction {
         opcode: CpuOpcode::ADC,
         function: adc::immediate,
+    }, /* 0x69 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        function: misc::stp,
     }, /* 0x6A */
     CpuInstruction {
         opcode: CpuOpcode::STP,
@@ -477,8 +477,8 @@ pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
         function: misc::stp,
     }, /* 0x6C */
     CpuInstruction {
-        opcode: CpuOpcode::STP,
-        function: misc::stp,
+        opcode: CpuOpcode::ADC,
+        function: adc::absolute,
     }, /* 0x6D */
     CpuInstruction {
         opcode: CpuOpcode::STP,
@@ -717,12 +717,12 @@ pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
         function: misc::stp,
     }, /* 0xA8 */
     CpuInstruction {
-        opcode: CpuOpcode::STP,
-        function: misc::stp,
-    }, /* 0xA9 */
-    CpuInstruction {
         opcode: CpuOpcode::LDA,
         function: lda::immediate,
+    }, /* 0xA9 */
+    CpuInstruction {
+        opcode: CpuOpcode::STP,
+        function: misc::stp,
     }, /* 0xAA */
     CpuInstruction {
         opcode: CpuOpcode::STP,

@@ -23,12 +23,12 @@ pub(super) fn immediate(
     cpu: &mut CpuState, _memory: &mut memory::Memory, mut param: u16,
 ) -> Option<u8> {
     // If the carry flag is already set then carry it forward
-    if cpu.registers.status.get_flag(StatusFlags::Carry) {
+    if cpu.registers.get_flag(StatusFlags::Carry) {
         param += 1;
     }
 
     // If the operation is in 8-bit mode, then perform all of the math in a u8 context.
-    match cpu.registers.status.get_flag(StatusFlags::AccSize) {
+    match cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => {
             let acc_value: u8 = (cpu.registers.acc.0 & 0x00FF) as u8;
             let param_value: u8 = (param & 0x00FF) as u8;
@@ -36,10 +36,10 @@ pub(super) fn immediate(
             // Check if an unsigned overflow occurred. If it did, then set the carry bit.
             match acc_value.checked_add(param_value) {
                 Some(_value) => {
-                    cpu.registers.status.clear_flag(StatusFlags::Carry);
+                    cpu.registers.clear_flag(StatusFlags::Carry);
                 }
                 None => {
-                    cpu.registers.status.set_flag(StatusFlags::Carry);
+                    cpu.registers.set_flag(StatusFlags::Carry);
                 }
             }
 
@@ -47,19 +47,19 @@ pub(super) fn immediate(
             // http://www.6502.org/tutorials/vflag.html
             match (acc_value as i8).checked_add(param_value as i8) {
                 Some(_value) => {
-                    cpu.registers.status.clear_flag(StatusFlags::Overflow);
+                    cpu.registers.clear_flag(StatusFlags::Overflow);
                 }
                 None => {
-                    cpu.registers.status.set_flag(StatusFlags::Overflow);
+                    cpu.registers.set_flag(StatusFlags::Overflow);
                 }
             }
 
             match acc_value.wrapping_add(param_value) as i8 >= 0 {
                 true => {
-                    cpu.registers.status.clear_flag(StatusFlags::Negative);
+                    cpu.registers.clear_flag(StatusFlags::Negative);
                 }
                 false => {
-                    cpu.registers.status.set_flag(StatusFlags::Negative);
+                    cpu.registers.set_flag(StatusFlags::Negative);
                 }
             }
 
@@ -69,29 +69,29 @@ pub(super) fn immediate(
             // Check if an unsigned overflow occurred and set the carry bit if needed
             match cpu.registers.acc.0.checked_add(param) {
                 Some(_value) => {
-                    cpu.registers.status.clear_flag(StatusFlags::Carry);
+                    cpu.registers.clear_flag(StatusFlags::Carry);
                 }
                 None => {
-                    cpu.registers.status.set_flag(StatusFlags::Carry);
+                    cpu.registers.set_flag(StatusFlags::Carry);
                 }
             }
 
             // Check if a signed overflow occurred and set the carry bit if needed.
             match (cpu.registers.acc.0 as i16).checked_add(param as i16) {
                 Some(_value) => {
-                    cpu.registers.status.clear_flag(StatusFlags::Overflow);
+                    cpu.registers.clear_flag(StatusFlags::Overflow);
                 }
                 None => {
-                    cpu.registers.status.set_flag(StatusFlags::Overflow);
+                    cpu.registers.set_flag(StatusFlags::Overflow);
                 }
             }
 
             match cpu.registers.acc.0.wrapping_add(param) as i16 >= 0 {
                 true => {
-                    cpu.registers.status.clear_flag(StatusFlags::Negative);
+                    cpu.registers.clear_flag(StatusFlags::Negative);
                 }
                 false => {
-                    cpu.registers.status.set_flag(StatusFlags::Negative);
+                    cpu.registers.set_flag(StatusFlags::Negative);
                 }
             }
 
@@ -102,12 +102,12 @@ pub(super) fn immediate(
     // Update the flags that will be the same.
 
     match cpu.registers.acc.0 {
-        0 => cpu.registers.status.set_flag(StatusFlags::Zero),
-        _ => cpu.registers.status.clear_flag(StatusFlags::Zero),
+        0 => cpu.registers.set_flag(StatusFlags::Zero),
+        _ => cpu.registers.clear_flag(StatusFlags::Zero),
     }
 
     // Return the number of cycles to pend.
-    match cpu.registers.status.get_flag(StatusFlags::AccSize) {
+    match cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => Some(2),
         REGISTER_MODE_16_BIT => Some(3),
     }
@@ -117,7 +117,12 @@ pub(super) fn immediate(
 /// Opcode: 0x6D for short, 0x6F for long
 /// Bytes: 3 for short, 4 for long
 /// Flags Affected: nv----zc
-pub(super) fn absolute(cpu: &mut CpuState, mem: &mut Memory, param: &mut u16) -> Option<u8> {
+pub(super) fn absolute(cpu: &mut CpuState, mem: &mut Memory, param: u16) -> Option<u8> {
+    match cpu.registers.get_flag(StatusFlags::AccSize) {
+        REGISTER_MODE_8_BIT => {}
+        REGISTER_MODE_16_BIT => {}
+    }
+
     None
 }
 
@@ -133,7 +138,8 @@ mod tests {
     #[test]
     fn test_immediate_8bit() {
         // TODO: Check whether e.g. 0xFF + 0x01 would result in 0x0100 being stored into the ACC
-        // even if we are in 8-bit mode.
+        // even if we are in 8-bit mode. Currently the carry bit gets set and the ACC stores only
+        // the lower byte.
         let test_cases = vec![
             //ACC +  B =  C,         n, v, z, c
             [0x0001, 0x0001, 0x0002, 0, 0, 0, 0],
@@ -147,7 +153,7 @@ mod tests {
         for case in test_cases {
             let mut test_cpu: CpuState = CpuState::new();
             let mut test_memory: Memory = Memory::new();
-            test_cpu.registers.status.set_flag(StatusFlags::AccSize);
+            test_cpu.registers.set_flag(StatusFlags::AccSize);
             test_cpu.registers.acc = Wrapping(case[0]);
 
             println!("Test case: {:?}", case);
@@ -162,22 +168,22 @@ mod tests {
             print!("Testing Flags: n, ");
             assert_eq!(
                 case[3],
-                test_cpu.registers.status.get_flag(StatusFlags::Negative) as u16
+                test_cpu.registers.get_flag(StatusFlags::Negative) as u16
             );
             print!("v, ");
             assert_eq!(
                 case[4],
-                test_cpu.registers.status.get_flag(StatusFlags::Overflow) as u16
+                test_cpu.registers.get_flag(StatusFlags::Overflow) as u16
             );
             print!("z, ");
             assert_eq!(
                 case[5],
-                test_cpu.registers.status.get_flag(StatusFlags::Zero) as u16
+                test_cpu.registers.get_flag(StatusFlags::Zero) as u16
             );
             println!("c.");
             assert_eq!(
                 case[6],
-                test_cpu.registers.status.get_flag(StatusFlags::Carry) as u16
+                test_cpu.registers.get_flag(StatusFlags::Carry) as u16
             );
         }
     }
@@ -196,7 +202,7 @@ mod tests {
         for case in test_cases {
             let mut test_cpu: CpuState = CpuState::new();
             let mut test_memory: Memory = Memory::new();
-            test_cpu.registers.status.clear_flag(StatusFlags::AccSize);
+            test_cpu.registers.clear_flag(StatusFlags::AccSize);
             test_cpu.registers.acc = Wrapping(case[0]);
 
             println!("Test case: {:?}", case);
@@ -211,22 +217,22 @@ mod tests {
             print!("Testing Flags: n, ");
             assert_eq!(
                 case[3],
-                test_cpu.registers.status.get_flag(StatusFlags::Negative) as u16
+                test_cpu.registers.get_flag(StatusFlags::Negative) as u16
             );
             print!("v, ");
             assert_eq!(
                 case[4],
-                test_cpu.registers.status.get_flag(StatusFlags::Overflow) as u16
+                test_cpu.registers.get_flag(StatusFlags::Overflow) as u16
             );
             print!("z, ");
             assert_eq!(
                 case[5],
-                test_cpu.registers.status.get_flag(StatusFlags::Zero) as u16
+                test_cpu.registers.get_flag(StatusFlags::Zero) as u16
             );
             println!("c.");
             assert_eq!(
                 case[6],
-                test_cpu.registers.status.get_flag(StatusFlags::Carry) as u16
+                test_cpu.registers.get_flag(StatusFlags::Carry) as u16
             );
         }
     }

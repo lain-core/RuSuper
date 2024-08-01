@@ -60,6 +60,42 @@ impl CpuRegisters {
     pub fn step_pc(&mut self, count: u16) {
         self.pc += count
     }
+
+    /// Set a target flag.
+    /// Parameters:
+    ///     - `self`
+    ///     - `flag`: Target flag to set.
+    pub fn set_flag(&mut self, flag: StatusFlags) {
+        self.status.flags[flag as usize] = true;
+        self.status.value = self.status.value | Wrapping(1 << flag as u8);
+
+        if flag == StatusFlags::AccSize {}
+    }
+
+    /// Clear a target flag.
+    /// Parameters:
+    ///     - `self`
+    ///     - `flag`: Target flag to clear.
+    pub fn clear_flag(&mut self, flag: StatusFlags) {
+        self.status.flags[flag as usize] = false;
+        self.status.value = self.status.value & Wrapping(!(1 << flag as u8));
+    }
+
+    /// Get an individual flag register value.
+    /// Parameters:
+    ///     - `self`
+    ///     - `flag`: Flag value to check.
+    /// Returns:
+    ///     - `false`: if flag is currently un-set
+    ///     - `true`: if flag is currently set
+    pub fn get_flag(&self, flag: StatusFlags) -> bool {
+        return self.status.flags[flag as usize];
+    }
+
+    /// Get the stored register value of all of the flags.
+    pub fn get_flag_vals(&self) -> u8 {
+        return self.status.value.0;
+    }
 }
 
 /// Status Flags.
@@ -103,39 +139,5 @@ impl StatusRegister {
             flags: [false; 8],
             value: Wrapping(0),
         }
-    }
-
-    /// Set a target flag.
-    /// Parameters:
-    ///     - `self`
-    ///     - `flag`: Target flag to set.
-    pub fn set_flag(&mut self, flag: StatusFlags) {
-        self.flags[flag as usize] = true;
-        self.value = self.value | Wrapping(1 << flag as u8);
-    }
-
-    /// Clear a target flag.
-    /// Parameters:
-    ///     - `self`
-    ///     - `flag`: Target flag to clear.
-    pub fn clear_flag(&mut self, flag: StatusFlags) {
-        self.flags[flag as usize] = false;
-        self.value = self.value & Wrapping(!(1 << flag as u8));
-    }
-
-    /// Get an individual flag register value.
-    /// Parameters:
-    ///     - `self`
-    ///     - `flag`: Flag value to check.
-    /// Returns:
-    ///     - `false`: if flag is currently un-set
-    ///     - `true`: if flag is currently set
-    pub fn get_flag(&self, flag: StatusFlags) -> bool {
-        return self.flags[flag as usize];
-    }
-
-    /// Get the stored register value of all of the flags.
-    pub fn get_flag_vals(&self) -> u8 {
-        return self.value.0;
     }
 }
