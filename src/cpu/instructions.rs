@@ -17,6 +17,7 @@ const INST_PARAM_OFFSET: u16 = 1;
 #[derive(Debug, Clone, Copy)]
 pub enum CpuOpcode {
     ADC,
+    LDA,
     STP,
     NOP,
     // Many More
@@ -720,8 +721,8 @@ pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
         function: misc::stp,
     }, /* 0xA9 */
     CpuInstruction {
-        opcode: CpuOpcode::STP,
-        function: misc::stp,
+        opcode: CpuOpcode::LDA,
+        function: lda::immediate,
     }, /* 0xAA */
     CpuInstruction {
         opcode: CpuOpcode::STP,
