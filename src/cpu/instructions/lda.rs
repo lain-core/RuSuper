@@ -14,7 +14,9 @@ use std::num::Wrapping;
 /// Opcode: 0xA9
 /// Bytes: 2 for 8-bit, 3 for 16-bit
 /// Flags affected: n-----z-
-pub(super) fn immediate(cpu: &mut CpuState, _mem: &mut Memory, param: u16) -> Option<u8> {
+pub(super) fn immediate(
+    cpu: &mut CpuState, _mem: &mut Memory, _bank: Option<u8>, param: u16,
+) -> Option<u8> {
     match cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => {
             let masked_param = param & 0x00FF;
@@ -82,7 +84,7 @@ mod tests {
         test_cpu.registers.set_flag(StatusFlags::AccSize);
 
         for case in test_cases {
-            lda::immediate(&mut test_cpu, &mut test_mem, case[0]);
+            lda::immediate(&mut test_cpu, &mut test_mem, None, case[0]);
 
             println!("Test Case: {:?}", case);
             print!("Testing Result");

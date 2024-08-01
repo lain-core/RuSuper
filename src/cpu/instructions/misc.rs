@@ -10,7 +10,9 @@ use super::*;
 ///
 /// # Returns
 ///     - None (stop running).
-pub(super) fn stp(_state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> Option<u8> {
+pub(super) fn stp(
+    _state: &mut CpuState, _memory: &mut memory::Memory, _bank: Option<u8>, _param: u16,
+) -> Option<u8> {
     None
 }
 
@@ -24,6 +26,8 @@ pub(super) fn stp(_state: &mut CpuState, _memory: &mut memory::Memory, _param: u
 ///
 /// # Returns
 ///     - true (continue running).
-pub(super) fn nop(_state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> Option<u8> {
+pub(super) fn nop(
+    _state: &mut CpuState, _memory: &mut memory::Memory, _bank: Option<u8>, _param: u16,
+) -> Option<u8> {
     Some(2)
 }

@@ -20,7 +20,7 @@ use super::{
 /// Bytes:  2 if 8-bit param, 3 if 16-bit
 /// Flags affected: nv----zc
 pub(super) fn immediate(
-    cpu: &mut CpuState, _memory: &mut memory::Memory, mut param: u16,
+    cpu: &mut CpuState, _memory: &mut memory::Memory, _bank: Option<u8>, mut param: u16,
 ) -> Option<u8> {
     // If the carry flag is already set then carry it forward
     if cpu.registers.get_flag(StatusFlags::Carry) {
@@ -117,7 +117,9 @@ pub(super) fn immediate(
 /// Opcode: 0x6D for short, 0x6F for long
 /// Bytes: 3 for short, 4 for long
 /// Flags Affected: nv----zc
-pub(super) fn absolute(cpu: &mut CpuState, mem: &mut Memory, param: u16) -> Option<u8> {
+pub(super) fn absolute(
+    cpu: &mut CpuState, mem: &mut Memory, _bank: Option<u8>, param: u16,
+) -> Option<u8> {
     match cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => {}
         REGISTER_MODE_16_BIT => {}
@@ -159,7 +161,7 @@ mod tests {
             println!("Test case: {:?}", case);
 
             // Perform the operation.
-            adc::immediate(&mut test_cpu, &mut test_memory, case[1]);
+            adc::immediate(&mut test_cpu, &mut test_memory, None, case[1]);
 
             // Check the outcome.
             print!("Testing output value. ");
@@ -208,7 +210,7 @@ mod tests {
             println!("Test case: {:?}", case);
 
             // Perform the operation.
-            adc::immediate(&mut test_cpu, &mut test_memory, case[1]);
+            adc::immediate(&mut test_cpu, &mut test_memory, None, case[1]);
 
             // Check the outcome.
             print!("Testing output value. ");

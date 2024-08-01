@@ -69,7 +69,10 @@ impl CpuRegisters {
         self.status.flags[flag as usize] = true;
         self.status.value = self.status.value | Wrapping(1 << flag as u8);
 
-        if flag == StatusFlags::AccSize {}
+        // If the user flips from 16-bit mode to 8-bit mode, clear the top byte in the ACC.
+        if flag == StatusFlags::AccSize {
+            self.acc = Wrapping(self.acc.0 & 0x00FF);
+        }
     }
 
     /// Clear a target flag.
