@@ -1,8 +1,3 @@
-/**************************************** Constant Values ***************************************************************/
-/**************************************** Struct and Type definitions ***************************************************/
-/**************************************** File Scope Functions **********************************************************/
-/**************************************** Public Functions **************************************************************/
-
 use std::num::Wrapping;
 
 use super::{
@@ -11,30 +6,33 @@ use super::{
     CpuInstructionFnArguments, CpuState,
 };
 
-/// ADC Immediate
-/// Syntax: ADC #const
-/// Opcode: 0x69
-/// Bytes:  2 if 8-bit param, 3 if 16-bit
-/// Flags affected: nv----zc
-pub(super) fn immediate(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
+/**************************************** Constant Values ***************************************************************/
+/**************************************** Struct and Type definitions ***************************************************/
+/**************************************** File Scope Functions **********************************************************/
+
+/// Perform an addition with carry and set the flags accordingly.
+/// Parameters:
+///     - `cpu`: State of the CPU to modify.
+///     - `param`: The value to add to the ACC value.
+fn perform_add(cpu: &mut CpuState, mut param: u16) {
     // If the carry flag is already set then carry it forward
-    if arg.cpu.registers.get_flag(StatusFlags::Carry) {
-        arg.param += 1;
+    if cpu.registers.get_flag(StatusFlags::Carry) {
+        param += 1;
     }
 
     // If the operation is in 8-bit mode, then perform all of the math in a u8 context.
-    match arg.cpu.registers.get_flag(StatusFlags::AccSize) {
+    match cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => {
-            let acc_value: u8 = (arg.cpu.registers.acc.0 & 0x00FF) as u8;
-            let param_value: u8 = (arg.param & 0x00FF) as u8;
+            let acc_value: u8 = (cpu.registers.acc.0 & 0x00FF) as u8;
+            let param_value: u8 = (param & 0x00FF) as u8;
 
             // Check if an unsigned overflow occurred. If it did, then set the carry bit.
             match acc_value.checked_add(param_value) {
                 Some(_value) => {
-                    arg.cpu.registers.clear_flag(StatusFlags::Carry);
+                    cpu.registers.clear_flag(StatusFlags::Carry);
                 }
                 None => {
-                    arg.cpu.registers.set_flag(StatusFlags::Carry);
+                    cpu.registers.set_flag(StatusFlags::Carry);
                 }
             }
 
@@ -42,70 +40,90 @@ pub(super) fn immediate(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
             // http://www.6502.org/tutorials/vflag.html
             match (acc_value as i8).checked_add(param_value as i8) {
                 Some(_value) => {
-                    arg.cpu.registers.clear_flag(StatusFlags::Overflow);
+                    cpu.registers.clear_flag(StatusFlags::Overflow);
                 }
                 None => {
-                    arg.cpu.registers.set_flag(StatusFlags::Overflow);
+                    cpu.registers.set_flag(StatusFlags::Overflow);
                 }
             }
 
             match acc_value.wrapping_add(param_value) as i8 >= 0 {
                 true => {
-                    arg.cpu.registers.clear_flag(StatusFlags::Negative);
+                    cpu.registers.clear_flag(StatusFlags::Negative);
                 }
                 false => {
-                    arg.cpu.registers.set_flag(StatusFlags::Negative);
+                    cpu.registers.set_flag(StatusFlags::Negative);
                 }
             }
 
-            arg.cpu.registers.acc = Wrapping(acc_value.wrapping_add(param_value) as u16);
+            cpu.registers.acc = Wrapping(acc_value.wrapping_add(param_value) as u16);
         }
         REGISTER_MODE_16_BIT => {
             // Check if an unsigned overflow occurred and set the carry bit if needed
-            match arg.cpu.registers.acc.0.checked_add(arg.param) {
+            match cpu.registers.acc.0.checked_add(param) {
                 Some(_value) => {
-                    arg.cpu.registers.clear_flag(StatusFlags::Carry);
+                    cpu.registers.clear_flag(StatusFlags::Carry);
                 }
                 None => {
-                    arg.cpu.registers.set_flag(StatusFlags::Carry);
+                    cpu.registers.set_flag(StatusFlags::Carry);
                 }
             }
 
             // Check if a signed overflow occurred and set the carry bit if needed.
-            match (arg.cpu.registers.acc.0 as i16).checked_add(arg.param as i16) {
+            match (cpu.registers.acc.0 as i16).checked_add(param as i16) {
                 Some(_value) => {
-                    arg.cpu.registers.clear_flag(StatusFlags::Overflow);
+                    cpu.registers.clear_flag(StatusFlags::Overflow);
                 }
                 None => {
-                    arg.cpu.registers.set_flag(StatusFlags::Overflow);
+                    cpu.registers.set_flag(StatusFlags::Overflow);
                 }
             }
 
-            match arg.cpu.registers.acc.0.wrapping_add(arg.param) as i16 >= 0 {
+            match cpu.registers.acc.0.wrapping_add(param) as i16 >= 0 {
                 true => {
-                    arg.cpu.registers.clear_flag(StatusFlags::Negative);
+                    cpu.registers.clear_flag(StatusFlags::Negative);
                 }
                 false => {
-                    arg.cpu.registers.set_flag(StatusFlags::Negative);
+                    cpu.registers.set_flag(StatusFlags::Negative);
                 }
             }
 
-            arg.cpu.registers.acc += Wrapping(arg.param);
+            cpu.registers.acc += Wrapping(param);
         }
     }
 
     // Update the flags that will be the same.
 
-    match arg.cpu.registers.acc.0 {
-        0 => arg.cpu.registers.set_flag(StatusFlags::Zero),
-        _ => arg.cpu.registers.clear_flag(StatusFlags::Zero),
+    match cpu.registers.acc.0 {
+        0 => cpu.registers.set_flag(StatusFlags::Zero),
+        _ => cpu.registers.clear_flag(StatusFlags::Zero),
     }
+}
 
+/**************************************** Public Functions **************************************************************/
+
+/// ADC Immediate
+/// Syntax: ADC #const
+/// Opcode: 0x69
+/// Bytes:  2 if 8-bit param, 3 if 16-bit
+/// Flags affected: nv----zc
+pub(super) fn immediate(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
+    // Add the value.
+    perform_add(arg.cpu, arg.param);
+
+    let mut cycles_to_pend: u8 = 0;
+
+    // If the parameter is 0, then this takes one additional cycle.
+    if arg.param == 0 {
+        cycles_to_pend += 1;
+    }
     // Return the number of cycles to pend.
     match arg.cpu.registers.get_flag(StatusFlags::AccSize) {
-        REGISTER_MODE_8_BIT => Some(2),
-        REGISTER_MODE_16_BIT => Some(3),
+        REGISTER_MODE_8_BIT => cycles_to_pend += 2,
+        REGISTER_MODE_16_BIT => cycles_to_pend += 3,
     }
+
+    Some(cycles_to_pend)
 }
 
 /// ADC absolute
@@ -113,12 +131,42 @@ pub(super) fn immediate(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
 /// Bytes: 3 for short, 4 for long
 /// Flags Affected: nv----zc
 pub(super) fn absolute(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
-    match arg.cpu.registers.get_flag(StatusFlags::AccSize) {
-        REGISTER_MODE_8_BIT => {}
-        REGISTER_MODE_16_BIT => {}
+    let value: u16;
+    match arg.bank {
+        Some(bank) => {
+            let memaddr = memory::compose_address(bank, arg.param);
+            value = arg
+                .memory
+                .get_word(memaddr)
+                .expect("Parameter was out of bounds in memory.");
+        }
+        None => {
+            let memaddr = memory::compose_address(arg.cpu.registers.data_bank.0, arg.param);
+            value = arg
+                .memory
+                .get_word(memaddr)
+                .expect("Parameter was out of bounds in memory.");
+        }
     }
 
-    None
+    perform_add(arg.cpu, value);
+
+    let mut cycles_to_pend = 0;
+
+    if value == 0 {
+        cycles_to_pend += 1;
+    }
+
+    match arg.bank {
+        Some(_) => {
+            cycles_to_pend += 5;
+        }
+        None => {
+            cycles_to_pend += 4;
+        }
+    }
+
+    Some(cycles_to_pend)
 }
 
 /**************************************** Tests *************************************************************************/
