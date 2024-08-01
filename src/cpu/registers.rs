@@ -2,27 +2,8 @@ use std::num::Wrapping;
 
 /**************************************** Constant Values ***************************************************************/
 
-/// NVMXDIZC
-/// 00000000
-/// ^^^^^^^^
-/// |||||||└> Carry
-/// ||||||└─> Zero
-/// |||||└──> IRQ Disable
-/// ||||└───> Decimal
-/// |||└────> Index Register Size (Native Mode Only). 0 = 16-bit. 1 = 8-bit. Break in emulation mode.
-/// ||└─────> Accumulator Register Size (Native Mode Only). 0 = 16-bit. 1 = 8-bit.
-/// |└──────> Overflow
-/// └───────> Negative
-
-pub(super) const STATUS_CARRY_BIT: usize = 0;
-pub(super) const STATUS_ZERO_BIT: usize = 1;
-pub(super) const STATUS_IRQ_BIT: usize = 2;
-pub(super) const STATUS_DECIMAL_BIT: usize = 3;
-pub(super) const STATUS_IREG_SIZE_BIT: usize = 4;
-pub(super) const STATUS_AREG_SIZE_BIT: usize = 5;
-pub(super) const STATUS_OVERFLOW_BIT: usize = 6;
-pub(super) const STATUS_NEGATIVE_BIT: usize = 7;
-
+pub(super) const ALU_8BIT_NEGATIVE_BIT: usize = 7;
+pub(super) const ALU_16BIT_NEGATIVE_BIT: usize = 15;
 pub(super) const ALU_8BIT_CARRY_BIT: usize = 8;
 pub(super) const ALU_16BIT_CARRY_BIT: usize = 16;
 
@@ -81,8 +62,22 @@ impl CpuRegisters {
     }
 }
 
-/// Status Register.
+/// Status Flags.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatusFlags {
+    Carry = 0,
+    Zero = 1,
+    IRQDisable = 2,
+    Decimal = 3,
+    IndexSize = 4,
+    AccSize = 5,
+    Overflow = 6,
+    Negative = 7,
+}
+
 ///
+/// Status Register.
 /// Contains the flags for caluclated values, and the stored value of those set flags.
 ///
 /// NVMXDIZC
@@ -98,8 +93,8 @@ impl CpuRegisters {
 /// └───────> Negative
 #[derive(Debug, Clone, Copy)]
 pub(super) struct StatusRegister {
-    pub(super) flags: [bool; 8],
-    pub(super) value: Wrapping<u8>,
+    flags: [bool; 8],
+    value: Wrapping<u8>,
 }
 
 impl StatusRegister {
@@ -110,11 +105,37 @@ impl StatusRegister {
         }
     }
 
-    /// Update the flag value based on the flags set.
-    pub fn update_flag_value(&mut self) {
-        for (bit, flag) in self.flags.iter().enumerate() {
-            let bitvalue = if *flag { 1 } else { 0 };
-            self.value = Wrapping(self.value.0 & (bitvalue << bit) as u8);
-        }
+    /// Set a target flag.
+    /// Parameters:
+    ///     - `self`
+    ///     - `flag`: Target flag to set.
+    pub fn set_flag(&mut self, flag: StatusFlags) {
+        self.flags[flag as usize] = true;
+        self.value = self.value | Wrapping(1 << flag as u8);
+    }
+
+    /// Clear a target flag.
+    /// Parameters:
+    ///     - `self`
+    ///     - `flag`: Target flag to clear.
+    pub fn clear_flag(&mut self, flag: StatusFlags) {
+        self.flags[flag as usize] = false;
+        self.value = self.value & Wrapping(!(1 << flag as u8));
+    }
+
+    /// Get an individual flag register value.
+    /// Parameters:
+    ///     - `self`
+    ///     - `flag`: Flag value to check.
+    /// Returns:
+    ///     - `false`: if flag is currently un-set
+    ///     - `true`: if flag is currently set
+    pub fn get_flag(&self, flag: StatusFlags) -> bool {
+        return self.flags[flag as usize];
+    }
+
+    /// Get the stored register value of all of the flags.
+    pub fn get_flag_vals(&self) -> u8 {
+        return self.value.0;
     }
 }

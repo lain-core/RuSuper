@@ -1,5 +1,6 @@
 mod adc;
 mod branch;
+mod lda;
 mod misc;
 
 use super::*;
