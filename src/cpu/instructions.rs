@@ -33,7 +33,6 @@ pub(super) struct CpuInstructionFnArguments<'a> {
     param: u16,
 }
 
-
 /// The width of the parameter for this operation.
 /// For ops of variable width, this represents the longest possible width.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -1365,20 +1364,48 @@ pub(super) fn fetch_and_decode(cpu: &mut CpuState, memory: &memory::Memory) -> C
 pub(super) fn execute(
     cpu: &mut CpuState, inst: CpuInstruction, memory: &mut memory::Memory,
 ) -> bool {
-    let parameter_location: usize = cpu.get_pc() + INST_PARAM_OFFSET as usize;
-    let param: u16 = memory
-        .get_word(parameter_location)
-        .expect("Parameter for instruction was out of bounds");
-
     let mut arg: CpuInstructionFnArguments = CpuInstructionFnArguments {
         cpu,
         memory,
         bank: None,
-        param,
+        param: 0,
+    };
+
+    let mut parameter_location: usize = arg.cpu.get_pc() + INST_PARAM_OFFSET as usize;
+
+    match inst.width {
+        CpuParamWidth::None => (),
+        CpuParamWidth::Byte => {
+            arg.param =
+                arg.memory
+                    .get_byte(parameter_location)
+                    .expect("Parameter for instruction was out of bounds") as u16;
+        }
+        CpuParamWidth::Word => {
+            arg.param = arg
+                .memory
+                .get_word(parameter_location)
+                .expect("Parameter for instruction was out of bounds");
+        }
+        CpuParamWidth::Long => {
+            arg.bank = Some(
+                arg.memory
+                    .get_byte(parameter_location)
+                    .expect("Bank for parameter was out of bounds"),
+            );
+            parameter_location += 1;
+            arg.param = arg
+                .memory
+                .get_word(parameter_location)
+                .expect("Parameter for instruction was out of bounds");
+        }
     };
 
     // Call the function to execute.
-    println!("Executing {:?} with parameter {:08X}", inst.opcode, param);
+    println!(
+        "Executing {:?} with parameter {:08X}",
+        inst.opcode, arg.param
+    );
     match (inst.function)(&mut arg) {
         Some(pc_increment) => {
             cpu.registers.step_pc(pc_increment as u16);
