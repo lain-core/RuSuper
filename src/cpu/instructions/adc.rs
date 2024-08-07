@@ -113,10 +113,6 @@ pub(super) fn immediate(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
 
     let mut cycles_to_pend: u8 = 0;
 
-    // If the parameter is 0, then this takes one additional cycle.
-    if arg.param == 0 {
-        cycles_to_pend += 1;
-    }
     // Return the number of cycles to pend.
     match arg.cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => cycles_to_pend += 2,
@@ -131,23 +127,25 @@ pub(super) fn immediate(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
 /// Bytes: 3 for short, 4 for long
 /// Flags Affected: nv----zc
 pub(super) fn absolute(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
-    let value: u16;
-    match arg.bank {
+    // If the instruction included a bank address, This is a 4-byte inst and is accessing a value
+    // with a full address.
+    //
+    // If the instruction didn't include a bank address, this is a 3-byte inst and is accessing a
+    // value with a full address.
+    let value = match arg.bank {
         Some(bank) => {
             let memaddr = memory::compose_address(bank, arg.param);
-            value = arg
-                .memory
+            arg.memory
                 .get_word(memaddr)
-                .expect("Parameter was out of bounds in memory.");
+                .expect("Parameter was out of bounds in memory.")
         }
         None => {
             let memaddr = memory::compose_address(arg.cpu.registers.data_bank.0, arg.param);
-            value = arg
-                .memory
+            arg.memory
                 .get_word(memaddr)
-                .expect("Parameter was out of bounds in memory.");
+                .expect("Parameter was out of bounds in memory.")
         }
-    }
+    };
 
     perform_add(arg.cpu, value);
 

@@ -67,7 +67,7 @@ impl CpuRegisters {
     ///     - `flag`: Target flag to set.
     pub fn set_flag(&mut self, flag: StatusFlags) {
         self.status.flags[flag as usize] = true;
-        self.status.value = self.status.value | Wrapping(1 << flag as u8);
+        self.status.value |= Wrapping(1 << flag as u8);
 
         // If the user flips from 16-bit mode to 8-bit mode, clear the top byte in the ACC.
         if flag == StatusFlags::AccSize {
@@ -81,7 +81,7 @@ impl CpuRegisters {
     ///     - `flag`: Target flag to clear.
     pub fn clear_flag(&mut self, flag: StatusFlags) {
         self.status.flags[flag as usize] = false;
-        self.status.value = self.status.value & Wrapping(!(1 << flag as u8));
+        self.status.value &= Wrapping(!(1 << flag as u8));
     }
 
     /// Get an individual flag register value.
@@ -92,12 +92,12 @@ impl CpuRegisters {
     ///     - `false`: if flag is currently un-set
     ///     - `true`: if flag is currently set
     pub fn get_flag(&self, flag: StatusFlags) -> bool {
-        return self.status.flags[flag as usize];
+        self.status.flags[flag as usize]
     }
 
     /// Get the stored register value of all of the flags.
     pub fn get_flag_vals(&self) -> u8 {
-        return self.status.value.0;
+        self.status.value.0
     }
 }
 

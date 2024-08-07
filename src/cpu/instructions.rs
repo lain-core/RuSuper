@@ -3,6 +3,8 @@ mod branch;
 mod lda;
 mod misc;
 
+use registers::REGISTER_MODE_16_BIT;
+
 use super::*;
 
 /**************************************** Constant Values ***************************************************************/
@@ -34,13 +36,15 @@ pub(super) struct CpuInstructionFnArguments<'a> {
 }
 
 /// The width of the parameter for this operation.
-/// For ops of variable width, this represents the longest possible width.
+/// The underlying value is the number of bytes to increment the PC by.
+#[repr(u16)]
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum CpuParamWidth {
-    None,
-    Byte, // Parameter is 8-bit (1 Byte)
-    Word, // Parameter is 16-bit (1 Word)
-    Long, // Parameter is 24-bit (long)
+    Variable = 0, // Paramater is variable width (depends on ALU setting)
+    None = 1,
+    Byte = 2, // Parameter is 8-bit (1 Byte)
+    Word = 3, // Parameter is 16-bit (1 Word)
+    Long = 4, // Parameter is 24-bit (long)
 }
 
 /// A conglomerate wrapper of the prior enums.
@@ -584,7 +588,7 @@ pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
     }, /* 0x68 */
     CpuInstruction {
         opcode: CpuOpcode::Adc,
-        width: CpuParamWidth::Word,
+        width: CpuParamWidth::Variable,
         function: adc::immediate,
     }, /* 0x69 */
     CpuInstruction {
@@ -604,7 +608,7 @@ pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
     }, /* 0x6C */
     CpuInstruction {
         opcode: CpuOpcode::Adc,
-        width: CpuParamWidth::None,
+        width: CpuParamWidth::Word,
         function: adc::absolute,
     }, /* 0x6D */
     CpuInstruction {
@@ -613,9 +617,9 @@ pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
         function: misc::stp,
     }, /* 0x6E */
     CpuInstruction {
-        opcode: CpuOpcode::Stp,
-        width: CpuParamWidth::None,
-        function: misc::stp,
+        opcode: CpuOpcode::Adc,
+        width: CpuParamWidth::Long,
+        function: adc::absolute,
     }, /* 0x6F */
     CpuInstruction {
         opcode: CpuOpcode::Stp,
@@ -1373,20 +1377,31 @@ pub(super) fn execute(
 
     let mut parameter_location: usize = arg.cpu.get_pc() + INST_PARAM_OFFSET as usize;
 
-    match inst.width {
-        CpuParamWidth::None => (),
-        CpuParamWidth::Byte => {
-            arg.param =
-                arg.memory
+    // Prepare the parameter.
+    arg.param = match inst.width {
+        CpuParamWidth::None => 0,
+        CpuParamWidth::Variable => {
+            match arg.cpu.registers.get_flag(registers::StatusFlags::AccSize) {
+                registers::REGISTER_MODE_8_BIT => arg
+                    .memory
                     .get_byte(parameter_location)
-                    .expect("Parameter for instruction was out of bounds") as u16;
+                    .expect("Parameter for instruction was out of bounds")
+                    as u16,
+                REGISTER_MODE_16_BIT => arg
+                    .memory
+                    .get_word(parameter_location)
+                    .expect("Parameter for instruction was out of bounds"),
+            }
         }
-        CpuParamWidth::Word => {
-            arg.param = arg
-                .memory
-                .get_word(parameter_location)
-                .expect("Parameter for instruction was out of bounds");
+        CpuParamWidth::Byte => {
+            arg.memory
+                .get_byte(parameter_location)
+                .expect("Parameter for instruction was out of bounds") as u16
         }
+        CpuParamWidth::Word => arg
+            .memory
+            .get_word(parameter_location)
+            .expect("Parameter for instruction was out of bounds"),
         CpuParamWidth::Long => {
             arg.bank = Some(
                 arg.memory
@@ -1394,10 +1409,9 @@ pub(super) fn execute(
                     .expect("Bank for parameter was out of bounds"),
             );
             parameter_location += 1;
-            arg.param = arg
-                .memory
+            arg.memory
                 .get_word(parameter_location)
-                .expect("Parameter for instruction was out of bounds");
+                .expect("Parameter for instruction was out of bounds")
         }
     };
 
@@ -1406,11 +1420,22 @@ pub(super) fn execute(
         "Executing {:?} with parameter {:08X}",
         inst.opcode, arg.param
     );
-    match (inst.function)(&mut arg) {
-        Some(pc_increment) => {
-            cpu.registers.step_pc(pc_increment as u16);
-            true
-        }
+
+    let running = match (inst.function)(&mut arg) {
+        // TODO: Implement cycle pending
+        Some(_cycle_count) => true,
         None => false,
-    }
+    };
+
+    // Calculate the PC Offset if the instruction was of variable len and then increment the pc.
+    arg.cpu.registers.pc += if inst.width == CpuParamWidth::Variable {
+        match arg.cpu.registers.get_flag(registers::StatusFlags::AccSize) {
+            registers::REGISTER_MODE_8_BIT => CpuParamWidth::Byte as u16,
+            registers::REGISTER_MODE_16_BIT => CpuParamWidth::Word as u16,
+        }
+    } else {
+        inst.width as u16
+    };
+
+    running
 }
