@@ -55,10 +55,15 @@ impl DebugFn for StepCommand {
     fn debug_op(
         &self, args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
-        let sub = StepSubCommandTypes::from(args[0]);
-        match sub {
-            StepSubCommandTypes::Step => sub.step_op(args, debug, vm),
-            _ => sub.step_op(&args[1..], debug, vm),
+        // If the user asked to step with no argument pass it to step once.
+        if args.is_empty() {
+            StepSubCommandTypes::Step.step_op(args, debug, vm)
+        } else {
+            let sub = StepSubCommandTypes::from(args[0]);
+            match sub {
+                StepSubCommandTypes::Step => sub.step_op(args, debug, vm),
+                _ => sub.step_op(&args[1..], debug, vm),
+            }
         }
     }
 }

@@ -41,6 +41,11 @@ impl CpuState {
     pub fn get_pc(&self) -> usize {
         memory::compose_address(self.registers.program_bank.0, self.registers.pc.0)
     }
+
+    // Print the state of the CPU.
+    pub fn print_state(&self) {
+        self.registers.print_state();
+    }
 }
 /**************************************** File Scope Functions **********************************************************/
 

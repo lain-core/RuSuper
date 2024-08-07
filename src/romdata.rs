@@ -127,8 +127,8 @@ type ExceptionVectorTable = [u8; EV_LEN_BYTES];
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(usize)]
 pub enum RomSize {
-    LoRom   = LO_ROM_HEADER_ADDR,
-    HiRom   = HI_ROM_HEADER_ADDR,
+    LoRom = LO_ROM_HEADER_ADDR,
+    HiRom = HI_ROM_HEADER_ADDR,
     ExHiRom = EX_HI_ROM_HEADER_ADDR,
 }
 const ROM_SIZE_NUM: usize = 3;
@@ -171,14 +171,14 @@ impl From<RomCoProcessor> for RomExpansions {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CartType {
-    ROMOnly             = 0x00,
-    ROMSram             = 0x01,
-    ROMSramBattery      = 0x02,
-    ROMCoCpu            = 0x03,
-    ROMCoCpuSram        = 0x04,
+    ROMOnly = 0x00,
+    ROMSram = 0x01,
+    ROMSramBattery = 0x02,
+    ROMCoCpu = 0x03,
+    ROMCoCpuSram = 0x04,
     ROMCoCpuSramBattery = 0x05,
-    ROMCoCpuBattery     = 0x06,
-    None                = 0x07,
+    ROMCoCpuBattery = 0x06,
+    None = 0x07,
 }
 const CART_TYPE_MASK: u8 = 0x0F;
 
@@ -201,14 +201,14 @@ impl From<u8> for CartType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RomCoProcessor {
-    DSP     = 0x00,
+    DSP = 0x00,
     SuperFX = 0x01,
-    OBC1    = 0x02,
-    SA1     = 0x03,
-    SDD1    = 0x04,
-    SRTC    = 0x05,
-    Other   = 0x0E, // Super Game Boy or Satellaview, out of scope
-    Custom  = 0x0F,
+    OBC1 = 0x02,
+    SA1 = 0x03,
+    SDD1 = 0x04,
+    SRTC = 0x05,
+    Other = 0x0E, // Super Game Boy or Satellaview, out of scope
+    Custom = 0x0F,
     None,
 }
 const ROM_COPROCESSOR_MASK: u8 = 0xF0;
@@ -234,11 +234,11 @@ impl From<u8> for RomCoProcessor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CustomCoProcessor {
-    SPC7110  = 0x00,
+    SPC7110 = 0x00,
     ST010_11 = 0x01,
-    ST018    = 0x02,
-    CX4      = 0x03,
-    None     = 0x04,
+    ST018 = 0x02,
+    CX4 = 0x03,
+    None = 0x04,
 }
 
 impl From<u8> for CustomCoProcessor {
@@ -257,25 +257,25 @@ impl From<u8> for CustomCoProcessor {
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum RomRegion {
-    Japan         = 0x00,
-    USA           = 0x01,
-    Europe        = 0x02,
-    Sweden        = 0x03,
-    Japan2        = 0x04,
-    Denmark       = 0x05,
-    France        = 0x06,
-    Netherlands   = 0x07,
-    Spain         = 0x08,
-    Germany       = 0x09,
-    Italy         = 0x0A,
-    China         = 0x0B,
-    Indonesia     = 0x0C,
-    SouthKorea    = 0x0D,
+    Japan = 0x00,
+    USA = 0x01,
+    Europe = 0x02,
+    Sweden = 0x03,
+    Japan2 = 0x04,
+    Denmark = 0x05,
+    France = 0x06,
+    Netherlands = 0x07,
+    Spain = 0x08,
+    Germany = 0x09,
+    Italy = 0x0A,
+    China = 0x0B,
+    Indonesia = 0x0C,
+    SouthKorea = 0x0D,
     International = 0x0E,
-    Canada        = 0x0F,
-    Brazil        = 0x10,
-    Australia     = 0x11,
-    None          = 0x12, // Used internally only
+    Canada = 0x0F,
+    Brazil = 0x10,
+    Australia = 0x11,
+    None = 0x12, // Used internally only
 }
 
 impl From<u8> for RomRegion {
@@ -405,8 +405,7 @@ pub fn load_rom(
                 rom[offset],
             );
         }
-    }
-    else {
+    } else {
         // Grab the header from the ROM to determine what size it is.
         data = fetch_header(&rom)?;
         fetch_opt_header(&rom, &mut data);
@@ -445,8 +444,7 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
             Ok(_) => {
                 if buf.capacity() != 0 {
                     retval = Ok(buf);
-                }
-                else {
+                } else {
                     retval = Err(RomReadError::from("Rom was of length 0"));
                 }
             }
@@ -454,8 +452,7 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
                 retval = Err(RomReadError::from(format!("Failed to read file: {}", e)));
             }
         };
-    }
-    else {
+    } else {
         retval = Err(RomReadError::from(format!(
             "Failed to open file at {}",
             &path.display()
@@ -630,11 +627,10 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
 
     if rom.capacity().is_power_of_two() {
         // If so, add the value of all the bytes therein.
-        for index in 0..rom.capacity() {
+        for index in 0..rom.capacity() - 1 {
             checksum += Wrapping(rom[index] as u16);
         }
-    }
-    else {
+    } else {
         // Otherwise, find the highest power of 2 available and then multiply the following data to equal that size.
         // e.g.:
         //      1.5 MiB rom will be 1 MiB + (0.5 * 2).
@@ -721,8 +717,7 @@ fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
     // Find the ROM clock speed.
     if data.header[HDR_MAP_MODE_INDEX] & MAP_FASTROM_MASK != 0 {
         data.mode.speed = RomClkSpeed::FastRom;
-    }
-    else {
+    } else {
         data.mode.speed = RomClkSpeed::SlowRom;
     }
 
@@ -817,14 +812,11 @@ fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError
         let rom_map_mode: u8 = header[HDR_MAP_MODE_INDEX];
         if (rom_map_mode & MAP_EXHIROM_MASK) != 0 {
             retval = Ok(RomSize::ExHiRom);
-        }
-        else if (rom_map_mode & MAP_HIROM_MASK) != 0 {
+        } else if (rom_map_mode & MAP_HIROM_MASK) != 0 {
             retval = Ok(RomSize::HiRom);
-        }
-        else if (rom_map_mode & MAP_BASE_MASK) != 0 {
+        } else if (rom_map_mode & MAP_BASE_MASK) != 0 {
             retval = Ok(RomSize::LoRom);
-        }
-        else {
+        } else {
             retval = Err(RomReadError::from(
                 "ROM Checksum was valid, but mapping mode was unreadable",
             ));
@@ -1011,10 +1003,14 @@ mod tests {
         }
 
         #[test]
-        fn test_fetch_optional_lorom() { test_fetch_optional_header(RomSize::LoRom); }
+        fn test_fetch_optional_lorom() {
+            test_fetch_optional_header(RomSize::LoRom);
+        }
 
         #[test]
-        fn test_fetch_exception_headers_lorom() { test_fetch_exception_headers(RomSize::LoRom); }
+        fn test_fetch_exception_headers_lorom() {
+            test_fetch_exception_headers(RomSize::LoRom);
+        }
     }
 
     mod hirom_tests {
@@ -1029,10 +1025,14 @@ mod tests {
         }
 
         #[test]
-        fn test_fetch_optional_hirom() { test_fetch_optional_header(RomSize::HiRom); }
+        fn test_fetch_optional_hirom() {
+            test_fetch_optional_header(RomSize::HiRom);
+        }
 
         #[test]
-        fn test_fetch_exception_headers_hirom() { test_fetch_exception_headers(RomSize::HiRom); }
+        fn test_fetch_exception_headers_hirom() {
+            test_fetch_exception_headers(RomSize::HiRom);
+        }
     }
 
     mod exhirom_tests {
@@ -1047,7 +1047,9 @@ mod tests {
         }
 
         #[test]
-        fn test_fetch_optional_exhirom() { test_fetch_optional_header(RomSize::ExHiRom); }
+        fn test_fetch_optional_exhirom() {
+            test_fetch_optional_header(RomSize::ExHiRom);
+        }
 
         #[test]
         fn test_fetch_exception_headers_exhirom() {
