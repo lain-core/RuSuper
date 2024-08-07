@@ -22,7 +22,9 @@ pub struct InvalidDbgArgError {
 }
 
 impl fmt::Display for InvalidDbgArgError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.value) }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }
 
 impl From<&str> for InvalidDbgArgError {
@@ -104,9 +106,8 @@ impl From<&str> for DebugCommandTypes {
             "s" => Self::Step,
             "step" => Self::Step,
 
-            "w" => Self::Watch,
-            "watch" => Self::Watch,
-
+            //            "w" => Self::Watch,
+            //            "watch" => Self::Watch,
             _ => Self::Invalid,
         }
     }
@@ -118,7 +119,7 @@ struct PrintCommand;
 struct ExitCommand;
 struct InvalidCommand;
 struct BreakCommand;
-struct _StepCommand;
+struct StepCommand;
 struct _DumpCommand;
 struct _WatchCommand;
 
@@ -178,8 +179,7 @@ pub fn run(mut vm: VirtualMachine) {
             if let Some(value) = debugger.breakpoint_state.get(vm.cpu.get_pc()) {
                 vm.is_running = false;
                 println!("BREAK: Halted at {:#08X}", value);
-            }
-            else {
+            } else {
                 vm.is_running = emu::step_cpu(&mut vm);
             }
         }
