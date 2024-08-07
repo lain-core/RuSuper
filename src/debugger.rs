@@ -131,7 +131,7 @@ impl DebugFn for DebugCommandTypes {
             DebugCommandTypes::Help => HelpCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Break => BreakCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Continue => ContinueCommand.debug_op(args, debug, vm),
-            DebugCommandTypes::Step => todo!(),
+            DebugCommandTypes::Step => StepCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Dump => todo!(),
             DebugCommandTypes::Print => PrintCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Watch => todo!(),
