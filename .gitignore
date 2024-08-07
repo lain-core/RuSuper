@@ -2,6 +2,8 @@
 **/data/*
 **/smw.sfc
 **/dkc2.sfc
+*.sfc
 *.smc
 *.tags
 .vscode/*
+tests/build/**

@@ -16,6 +16,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Fetch ASAR
+      run: 
+        wget https://github.com/RPGHacker/asar/archive/refs/tags/v1.91.zip
+        unzip v1.91.zip
+        cmake src
+        make
     - name: Build
       run: cargo build --verbose
     - name: Run tests
