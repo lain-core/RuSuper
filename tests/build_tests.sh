@@ -1,9 +1,9 @@
 #!/bin/bash
 
-if [ ! -d "build" ]; then
+if [ ! -d ./build ]; then
   mkdir build
 fi
 
-for file in *.asm; do
-  asar $file build/${file%%.*}.sfc
+for asmfile in *.asm; do
+  asar ${asmfile} build/"${asmfile%%.*}.sfc"
 done
