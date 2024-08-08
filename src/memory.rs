@@ -21,7 +21,9 @@ pub struct InvalidAddressError {
 }
 
 impl InvalidAddressError {
-    pub fn new(addr: usize) -> Self { Self { addr } }
+    pub fn new(addr: usize) -> Self {
+        Self { addr }
+    }
 }
 
 impl fmt::Display for InvalidAddressError {
@@ -42,6 +44,28 @@ impl Memory {
         Memory {
             // https://github.com/rust-lang/rust/issues/53827
             memory: vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap(),
+        }
+    }
+
+    /// Print out a few rows of memory.
+    pub fn print_bytes(&self, address: Option<usize>) {
+        let start_addr = match address {
+            Some(start) => start,
+            None => 0x808000,
+        };
+
+        print!("\n0x|");
+        for i in 0..16 {
+            print!("{:02X} ", i);
+        }
+        println!("\n==================================================");
+
+        for i in 0..8 {
+            print!("{:02x}|", i);
+            for j in 0..16 {
+                print!("{:02x} ", self.memory[start_addr + (16 * i) + j]);
+            }
+            println!();
         }
     }
 
@@ -131,7 +155,7 @@ impl Memory {
             Ok(_t) => {
                 let word_val: u16 =
                     u16::from_le_bytes([self.memory[address], self.memory[address + 1]]);
-                Ok((word_val).to_be())
+                Ok(word_val)
             }
             Err(e) => Err(e),
         }
@@ -159,8 +183,7 @@ pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
 pub fn address_is_valid(address: usize) -> Result<(), InvalidAddressError> {
     if address < MEMORY_SIZE {
         Ok(())
-    }
-    else {
+    } else {
         println!("Error");
         Err(InvalidAddressError::new(address))
     }

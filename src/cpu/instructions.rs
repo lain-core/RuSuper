@@ -1417,7 +1417,7 @@ pub(super) fn execute(
 
     // Call the function to execute.
     println!(
-        "Executing {:?} with parameter {:08X}",
+        "Executing {:?} with parameter {:04X}",
         inst.opcode, arg.param
     );
 
