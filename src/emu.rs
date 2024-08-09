@@ -85,11 +85,11 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     let mut vm = VirtualMachine::new();
     // TODO: https://github.com/HunterKing/RuSuper/issues/27
     if args.len() > 2 {
-        if args[2] == "--no-check" {
-            vm.romdata = romdata::load_rom(path, &mut vm.memory, true).unwrap();
+        if args[2] == "--retail" {
+            vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
         }
         else {
-            vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
+            vm.romdata = romdata::load_rom(path, &mut vm.memory, true).unwrap();
         }
     }
     else {
