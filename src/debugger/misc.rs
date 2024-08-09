@@ -1,6 +1,6 @@
 use super::{
-    parser::str_to_values, ContinueCommand, DebugFn, ExitCommand, HelpCommand, InvalidCommand,
-    PrintCommand, VirtualMachine,
+    ContinueCommand, DebugFn, ExitCommand, HelpCommand, InvalidCommand, PrintCommand,
+    VirtualMachine,
 };
 use crate::debugger::InvalidDbgArgError;
 use std::process::exit;
@@ -52,28 +52,32 @@ impl DebugFn for ContinueCommand {
 
 impl DebugFn for PrintCommand {
     fn debug_op(
-        &self, args: &[&str], debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
+        &self, _args: &[&str], _debug: &mut super::DebuggerState, vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
         // TODO: FIXME: Only operates on the table of breakpoints right now. In the future, this should collate a list of all available tables.
-        match str_to_values(args, &debug.breakpoint_state, vm) {
-            Ok((_, address)) => {
-                if let Ok(value) = vm.memory.get_word(address) {
-                    println!(
-                        "{:#08X} Byte Value: {:#04X} Word Value: {:#06X}",
-                        address,
-                        vm.memory.get_byte(address).expect(""),
-                        value
-                    );
-                }
-                else {
-                    return Err(InvalidDbgArgError::from(format!(
-                        "{:#08X} is out of range of memory.",
-                        address
-                    )));
-                }
-            }
-            Err(e) => return Err(e),
-        }
+        //        match str_to_values(args, &debug.breakpoint_state, vm) {
+        //            Ok((_, address)) => {
+        //                if let Ok(value) = vm.memory.get_word(address) {
+        //                    println!(
+        //                        "{:#08X} Byte Value: {:#04X} Word Value: {:#06X}",
+        //                        address,
+        //                        vm.memory.get_byte(address).expect(""),
+        //                        value
+        //                    );
+        //                }
+        //                else {
+        //                    return Err(InvalidDbgArgError::from(format!(
+        //                        "{:#08X} is out of range of memory.",
+        //                        address
+        //                    )));
+        //                }
+        //            }
+        //            Err(e) => return Err(e),
+        //        }
+        //        Ok(())
+        //    }
+        vm.cpu.print_state();
+        vm.memory.print_bytes(None);
         Ok(())
     }
 }

@@ -76,7 +76,7 @@ enum DebugCommandTypes {
     Step,
     Dump,
     Print,
-    Watch,
+    _Watch,
     Exit,
     Invalid,
 }
@@ -106,9 +106,8 @@ impl From<&str> for DebugCommandTypes {
             "s" => Self::Step,
             "step" => Self::Step,
 
-            "w" => Self::Watch,
-            "watch" => Self::Watch,
-
+            //            "w" => Self::Watch,
+            //            "watch" => Self::Watch,
             _ => Self::Invalid,
         }
     }
@@ -120,7 +119,7 @@ struct PrintCommand;
 struct ExitCommand;
 struct InvalidCommand;
 struct BreakCommand;
-struct _StepCommand;
+struct StepCommand;
 struct _DumpCommand;
 struct _WatchCommand;
 
@@ -132,10 +131,10 @@ impl DebugFn for DebugCommandTypes {
             DebugCommandTypes::Help => HelpCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Break => BreakCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Continue => ContinueCommand.debug_op(args, debug, vm),
-            DebugCommandTypes::Step => todo!(),
+            DebugCommandTypes::Step => StepCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Dump => todo!(),
             DebugCommandTypes::Print => PrintCommand.debug_op(args, debug, vm),
-            DebugCommandTypes::Watch => todo!(),
+            DebugCommandTypes::_Watch => todo!(),
             DebugCommandTypes::Exit => ExitCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Invalid => InvalidCommand.debug_op(args, debug, vm),
         }

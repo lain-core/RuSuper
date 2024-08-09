@@ -11,6 +11,7 @@ This is also a thanks to all of the authors of these documents!
 * SNES Memory Map [link](https://en.wikibooks.org/wiki/Super_NES_Programming/SNES_memory_map)
 * Timing information [link](https://wiki.superfamicom.org/timing)
 * ASAR Assembly Documentation: [link](https://rpghacker.github.io/asar/asar_19/manual/)
+ Helpful primer on V flag: [link](http://www.6502.org/tutorials/vflag.html)
 
 ## ROM Info:
 * LoROM Template: [link](https://github.com/pinobatch/lorom-template)

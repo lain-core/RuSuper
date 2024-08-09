@@ -9,11 +9,8 @@ use super::*;
 ///     - `param`   Unused.
 ///
 /// # Returns
-///     - false (stop running).
-pub(super) fn stp(state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> bool {
-    state.cycles_to_pend = 3;
-    false
-}
+///     - None (stop running).
+pub(super) fn stp(_arg: &mut CpuInstructionFnArguments) -> Option<u8> { None }
 
 /// Implementation of NOP instruction
 /// https://undisbeliever.net/snesdev/65816-opcodes.html#nop-no-operation
@@ -25,7 +22,4 @@ pub(super) fn stp(state: &mut CpuState, _memory: &mut memory::Memory, _param: u1
 ///
 /// # Returns
 ///     - true (continue running).
-pub(super) fn nop(state: &mut CpuState, _memory: &mut memory::Memory, _param: u16) -> bool {
-    state.cycles_to_pend = 2;
-    true
-}
+pub(super) fn nop(_arg: &mut CpuInstructionFnArguments) -> Option<u8> { Some(2) }
