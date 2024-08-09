@@ -77,10 +77,12 @@ impl BreakpointFn for SetOp {
         // If there were no arguments passed just set a breakpoint at the PC if possible
         if args.is_empty() {
             cmd_result = debug.breakpoint_state.insert(vm.cpu.get_pc());
+            println!("Breakpoint set at {:#08X}", vm.cpu.get_pc());
         }
         // If it was a value then just push that on.
         else if let Ok((_, value)) = str_to_values(args, &debug.breakpoint_state, vm) {
             cmd_result = debug.breakpoint_state.insert(value);
+            println!("Breakpoint set at {:#08X}", value);
         } else if token_args.contains_tag() {
             // If the value was constructed purely from literals, or it was made of existing tags, throw it on.
             // Otherwise we need to make a new tag so try to do so.
@@ -88,10 +90,10 @@ impl BreakpointFn for SetOp {
             match test_tag {
                 Ok((tagname, value)) => match debug.breakpoint_state.insert_tag(&tagname, value) {
                     Some(value) => {
-                        println!("Updated tag {} to address {:#08X}", tagname, value);
+                        println!("Breakpoint \"{}\" updated to {:#08X}", tagname, value);
                     }
                     None => {
-                        println!("Set tag {} at address {:#08X}", tagname, value);
+                        println!("Breakpoint \"{}\" set at {:#08X}", tagname, value);
                     }
                 },
                 Err(e) => {
@@ -99,7 +101,6 @@ impl BreakpointFn for SetOp {
                 }
             }
         }
-
         cmd_result
     }
 }

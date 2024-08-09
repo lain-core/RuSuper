@@ -52,15 +52,15 @@ enum CpuParamWidth {
 ///     - `width`       Width of next operation, to calculate parameters.
 ///     - `function`    Function pointer to handler for next operation.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct CpuInstruction {
-    opcode: CpuOpcode,
+pub struct CpuInstruction {
+    pub opcode: CpuOpcode,
     width: CpuParamWidth,
     function: CpuInstructionFn,
 }
 
 /// Map of the cpu opcodes.
 /// Would prefer this to be a hashmap, but rust cannot generate a HashMap::From() as const, and a global cannot be declared using `let`.
-pub(super) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
+pub(crate) const INSTRUCTION_MAP: [CpuInstruction; NUM_INSTRUCTIONS] = [
     CpuInstruction {
         opcode: CpuOpcode::Stp,
         width: CpuParamWidth::None,
@@ -1417,8 +1417,12 @@ pub(super) fn execute(
 
     // Call the function to execute.
     println!(
-        "Executing {:?} with parameter {:04X}",
-        inst.opcode, arg.param
+        "Executing {:?} ({:#04X}) parameter {:04X}",
+        inst.opcode,
+        arg.memory
+            .get_byte(arg.cpu.get_pc())
+            .expect("Failed to get PC"),
+        arg.param
     );
 
     let running = match (inst.function)(&mut arg) {

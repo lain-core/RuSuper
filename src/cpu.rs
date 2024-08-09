@@ -2,7 +2,7 @@ use registers::CpuRegisters;
 
 use crate::memory;
 
-mod instructions;
+pub(crate) mod instructions;
 mod registers;
 
 /**************************************** Constant Values ***************************************************************/

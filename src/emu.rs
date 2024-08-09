@@ -1,6 +1,7 @@
 use std::time;
 
 use crate::cpu;
+use crate::cpu::instructions::INSTRUCTION_MAP;
 use crate::debugger;
 use crate::memory;
 use crate::romdata;
@@ -55,6 +56,20 @@ impl VirtualMachine {
             is_running: false,
         }
     }
+
+    pub fn print_state(&self) {
+        self.cpu.print_state();
+
+        let pc_val = self
+            .memory
+            .get_byte(self.cpu.get_pc())
+            .expect("Could not get value at PC from memory");
+
+        println!(
+            "Instruction at PC is: {:#04X} ({:?})",
+            pc_val, INSTRUCTION_MAP[pc_val as usize].opcode
+        );
+    }
 }
 
 /**************************************** File Scope Functions **********************************************************/
@@ -72,12 +87,10 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     if args.len() > 2 {
         if args[2] == "--no-check" {
             vm.romdata = romdata::load_rom(path, &mut vm.memory, true).unwrap();
-        }
-        else {
+        } else {
             vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
         }
-    }
-    else {
+    } else {
         // Initialize the VM and then load the ROM into memory.
         vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
     }
@@ -92,8 +105,7 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     let debugger_enabled = true;
     if debugger_enabled {
         debugger::run(vm);
-    }
-    else {
+    } else {
         vm.is_running = true;
         while vm.is_running {
             // TODO: Should CPU be threaded or should this file be the king?

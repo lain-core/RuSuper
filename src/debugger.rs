@@ -196,6 +196,7 @@ pub fn run(mut vm: VirtualMachine) {
         }
         // If the VM is not currently running, then prompt the user on the debugger.
         else {
+            vm.print_state();
             print!(">> ");
             io::stdout().flush().unwrap();
             check_dbg_input(&mut debugger, &mut vm);

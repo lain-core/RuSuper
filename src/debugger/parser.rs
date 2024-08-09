@@ -117,8 +117,7 @@ impl TokenStreamHelpers for DebugTokenStream {
         }
         if !tags.is_empty() {
             Some(tags)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -166,8 +165,7 @@ fn collect_args(argvec: Vec<&str>) -> Result<DebugTokenStream, InvalidDbgArgErro
                 _ => (),
             }
         }
-    }
-    else {
+    } else {
         return Err(InvalidDbgArgError::from("Length of args passed was 0"));
     }
     // If there's anything left in the value buffer at the end throw it on.
@@ -194,13 +192,11 @@ fn collect_tags(tokens: DebugTokenStream) -> DebugTokenStream {
                 // If the value is strictly numeric, just push it on as a value.
                 if data.is_decimal() {
                     new_vec.push(TokenSeparator::Value(data.to_string()));
-                }
-                else if data.is_hex() {
+                } else if data.is_hex() {
                     // If the value is in hex, check that the modifier was found to be present, or else we are looking at a tag name.
                     if let Some(TokenSeparator::HexValue) = last_token {
                         new_vec.push(TokenSeparator::Value(data.to_string()));
-                    }
-                    else {
+                    } else {
                         new_vec.push(TokenSeparator::Tag(data.to_string()));
                     }
                 }
@@ -239,8 +235,7 @@ fn deref_tags(
             if let Some(value) = table.get_tag(tagname) {
                 tag_as_value_stack.push(TokenSeparator::Value(value.to_hex_string()));
                 tag_as_value_stack.push(TokenSeparator::HexValue);
-            }
-            else {
+            } else {
                 tag_as_value_stack.push(TokenSeparator::Tag(tagname.to_string()));
             }
         }
@@ -319,14 +314,12 @@ fn deref_tags(
         }
     }
 
-
     // Reverse the stack back to the proper order.
     let mut result_tokens: DebugTokenStream = vec![];
     while let Some(token) = tag_as_value_stack.pop() {
         result_tokens.push(token);
     }
 
-    println!("Output from deref_tags is {:?}", result_tokens);
     Ok(result_tokens)
 }
 
@@ -407,8 +400,7 @@ fn compute_address_from_args(
                     return Err(InvalidDbgArgError::from(
                         "Value contained a tag which could not be dereferenced",
                     ));
-                }
-                else {
+                } else {
                     deref_args = tokens;
                 }
             }
@@ -450,8 +442,7 @@ fn compute_address_from_args(
             // Lastly, check if the computed value is within memory bounds.
             if val < MEMORY_END {
                 Ok(val)
-            }
-            else {
+            } else {
                 Err(InvalidDbgArgError::from(format!(
                     "Final value {:#X} was out of memory bounds.",
                     val
@@ -573,8 +564,7 @@ pub fn str_to_values(
     if let Some(value) = res_value {
         if let Some(tags) = res_tags {
             cmd_res = Ok((Some(tags.to_vec()), value));
-        }
-        else {
+        } else {
             cmd_res = Ok((None, value));
         }
     }
@@ -1338,8 +1328,7 @@ pub mod tests {
 
                     // Create a new debugger instance, because deletion is private to breakpoints
                     debug = DebuggerState::new();
-                }
-                else {
+                } else {
                     assert!(create_new_tag(&test_input, &debug.breakpoint_state, &vm).is_err());
                 }
             }
@@ -1374,7 +1363,6 @@ pub mod tests {
                 Some((TEST_TAG_NAME3, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // tag3 tag + tag2
             ];
 
-
             for (test_input, expected_result) in zip(test_tag_tokens, numeric_results) {
                 test_table = ParserData::new();
                 test_table.insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
@@ -1385,15 +1373,13 @@ pub mod tests {
                     test_input, expected_result
                 );
 
-
                 if let Some((expected_tagname, expected_value)) = expected_result {
                     let tag_result = create_new_tag(&test_input, &test_table, &vm).unwrap();
                     println!("Result was: {:?}", tag_result);
                     // Check that the outcome is correct.
                     assert_eq!(expected_tagname, tag_result.0);
                     assert_eq!(expected_value, tag_result.1);
-                }
-                else {
+                } else {
                     println!("\nTesting for error!");
                     println!(
                         "Result from create_new was: {:?}",
@@ -1464,8 +1450,7 @@ pub mod tests {
                         result,
                         str_to_values(&test_input, &test_debug.breakpoint_state, &test_vm).unwrap()
                     )
-                }
-                else {
+                } else {
                     assert!(
                         str_to_values(&test_input, &test_debug.breakpoint_state, &test_vm).is_err()
                     );
@@ -1517,8 +1502,7 @@ pub mod tests {
                         result,
                         compute_address_from_args(&test_input, &test_table, &test_vm).unwrap()
                     );
-                }
-                else {
+                } else {
                     assert!(compute_address_from_args(&test_input, &test_table, &test_vm).is_err());
                 }
             }
