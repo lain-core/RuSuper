@@ -307,8 +307,8 @@ mod tests {
             .unwrap();
 
         // Quick sanity check to make sure our get_word() gives back a BE value.
-        memory_under_test.memory[0] = 0xAA;
-        memory_under_test.memory[1] = 0xBB;
+        memory_under_test.memory[0] = 0xBB;
+        memory_under_test.memory[1] = 0xAA;
         assert_eq!(memory_under_test.get_word(0x000000).unwrap(), 0xAABB);
 
         let mut rand_word: u16;
