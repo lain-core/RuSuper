@@ -39,7 +39,7 @@ impl ParserData {
     ///     - `None`:           If the tag was not present in the list.
     pub fn get_tag_name(&self, address: usize) -> Option<&str> { self.tag_db.find_key(address) }
 
-    /// Wrapper for inserting a breakpoint with a tag and an address.
+    /// Wrapper for inserting a value with a tag and an address.
     /// If a tag is already present, updates the value and returns it, Otherwise, inserts into the
     /// table.
     ///
@@ -79,7 +79,7 @@ impl ParserData {
         None
     }
 
-    /// Check if a value is present in the breakpoint table.
+    /// Check if a value is present in the table.
     /// # Parameters:
     ///     - `self`
     ///     - `address`: Address to test.
@@ -108,13 +108,13 @@ impl ParserData {
         if let Some(value) = self.get(address) {
             if let Some(name) = self.tag_db.find_key(address) {
                 Err(InvalidDbgArgError::from(format!(
-                    "Breakpoint {} already exists at {:#08X}",
+                    "Tag {} already exists at {:#08X}",
                     name, value
                 )))
             }
             else {
                 Err(InvalidDbgArgError::from(format!(
-                    "A breakpoint was already set at {:#08X}",
+                    "A value already exists at {:#08X}",
                     value
                 )))
             }
@@ -128,7 +128,7 @@ impl ParserData {
     /// Wrapper for utils::remove_value.
     /// # Parameters:
     ///     - `&mut self`
-    ///     - `address`: The value to remove from the breakpoint list.
+    ///     - `address`: The value to remove from the list.
     /// # Returns:
     ///     - `Some(address)`:  The address that was removed from the table
     ///     - `None`:           If the address was not present in the table.
