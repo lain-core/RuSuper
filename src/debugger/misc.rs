@@ -76,7 +76,6 @@ impl DebugFn for PrintCommand {
         //        }
         //        Ok(())
         //    }
-        vm.cpu.print_state();
         vm.memory.print_bytes(None);
         Ok(())
     }

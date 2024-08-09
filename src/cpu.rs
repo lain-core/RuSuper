@@ -2,7 +2,7 @@ use registers::CpuRegisters;
 
 use crate::memory;
 
-mod instructions;
+pub(crate) mod instructions;
 mod registers;
 
 /**************************************** Constant Values ***************************************************************/
@@ -43,9 +43,7 @@ impl CpuState {
     }
 
     // Print the state of the CPU.
-    pub fn print_state(&self) {
-        self.registers.print_state();
-    }
+    pub fn print_state(&self) { self.registers.print_state(); }
 }
 /**************************************** File Scope Functions **********************************************************/
 

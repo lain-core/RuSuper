@@ -58,7 +58,8 @@ impl DebugFn for StepCommand {
         // If the user asked to step with no argument pass it to step once.
         if args.is_empty() {
             StepSubCommandTypes::Step.step_op(args, debug, vm)
-        } else {
+        }
+        else {
             let sub = StepSubCommandTypes::from(args[0]);
             match sub {
                 StepSubCommandTypes::Step => sub.step_op(args, debug, vm),

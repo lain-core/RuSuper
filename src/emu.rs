@@ -1,6 +1,7 @@
 use std::time;
 
 use crate::cpu;
+use crate::cpu::instructions::INSTRUCTION_MAP;
 use crate::debugger;
 use crate::memory;
 use crate::romdata;
@@ -55,6 +56,20 @@ impl VirtualMachine {
             is_running: false,
         }
     }
+
+    pub fn print_state(&self) {
+        self.cpu.print_state();
+
+        let pc_val = self
+            .memory
+            .get_byte(self.cpu.get_pc())
+            .expect("Could not get value at PC from memory");
+
+        println!(
+            "Instruction at PC is: {:#04X} ({:?})",
+            pc_val, INSTRUCTION_MAP[pc_val as usize].opcode
+        );
+    }
 }
 
 /**************************************** File Scope Functions **********************************************************/
@@ -70,11 +85,11 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     let mut vm = VirtualMachine::new();
     // TODO: https://github.com/HunterKing/RuSuper/issues/27
     if args.len() > 2 {
-        if args[2] == "--no-check" {
-            vm.romdata = romdata::load_rom(path, &mut vm.memory, true).unwrap();
+        if args[2] == "--retail" {
+            vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
         }
         else {
-            vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
+            vm.romdata = romdata::load_rom(path, &mut vm.memory, true).unwrap();
         }
     }
     else {

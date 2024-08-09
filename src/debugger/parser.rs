@@ -319,14 +319,12 @@ fn deref_tags(
         }
     }
 
-
     // Reverse the stack back to the proper order.
     let mut result_tokens: DebugTokenStream = vec![];
     while let Some(token) = tag_as_value_stack.pop() {
         result_tokens.push(token);
     }
 
-    println!("Output from deref_tags is {:?}", result_tokens);
     Ok(result_tokens)
 }
 
@@ -1374,7 +1372,6 @@ pub mod tests {
                 Some((TEST_TAG_NAME3, (TEST_BASE_ADDR + TEST_HEX_VALUE))), // tag3 tag + tag2
             ];
 
-
             for (test_input, expected_result) in zip(test_tag_tokens, numeric_results) {
                 test_table = ParserData::new();
                 test_table.insert_tag(TEST_TAG_NAME, TEST_BASE_ADDR);
@@ -1384,7 +1381,6 @@ pub mod tests {
                     "\nTest input is {:?}\nExpected Result is {:?}",
                     test_input, expected_result
                 );
-
 
                 if let Some((expected_tagname, expected_value)) = expected_result {
                     let tag_result = create_new_tag(&test_input, &test_table, &vm).unwrap();

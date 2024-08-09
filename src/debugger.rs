@@ -22,9 +22,7 @@ pub struct InvalidDbgArgError {
 }
 
 impl fmt::Display for InvalidDbgArgError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.value) }
 }
 
 impl From<&str> for InvalidDbgArgError {
@@ -179,7 +177,8 @@ pub fn run(mut vm: VirtualMachine) {
             if let Some(value) = debugger.breakpoint_state.get(vm.cpu.get_pc()) {
                 vm.is_running = false;
                 println!("BREAK: Halted at {:#08X}", value);
-            } else {
+            }
+            else {
                 vm.is_running = emu::step_cpu(&mut vm);
             }
         }
@@ -196,6 +195,7 @@ pub fn run(mut vm: VirtualMachine) {
         }
         // If the VM is not currently running, then prompt the user on the debugger.
         else {
+            vm.print_state();
             print!(">> ");
             io::stdout().flush().unwrap();
             check_dbg_input(&mut debugger, &mut vm);

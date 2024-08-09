@@ -1,20 +1,20 @@
 # RuSuper
+
 gdb-style debugger of SNES roms. Upon starting the application, you will be prompted with a shell. You can use `help` to see the possible commands.
 
 ## Pre-requisites
+
     - Rustc 1.70.0+
 
 ## Usage
+
 `cargo run filename`. You can apply the following command line arguments as well:
 
--  `--no-check`: Skip the checksum check for target rom and write to memory directly.
-    - This is useful for test roms of very basic ASM.
-    - This is NOT useful for retail ROMs, as the header and checksum are important to discern the mapping of the rom.
-
-### Unimplemented/TBD
--   `--no-debug`: Run the program without executing the debugger. Currently hard coded to enable.
+`--retail` For properly writing a ROM into memory using the `Romdata` module
+  This is diabled by default currently to make testing with simplified ASM programs easier.
 
 ## Debugger Functionality
+
 The prefix `$` is allowed wherever an address literal is found to identify a hex value.
 
 - `help` or `h`: Display the **h**elp screen.
