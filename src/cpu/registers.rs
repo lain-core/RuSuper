@@ -51,7 +51,7 @@ impl CpuRegisters {
     /// Print the current state of the CPU.
     pub fn print_state(&self) {
         println!(
-            "\nPC: {:#08X} ACC: {:#06X} SP: {:#06X}\nData Bank: {:#04X} Prog Bank: {:#04X} Direct Page: {:#06X}"
+            "\nPC: {:#06X} ACC: {:#06X} SP: {:#06X}\nData Bank: {:#04X} Prog Bank: {:#04X} Direct Page: {:#06X}"
              ,self.pc, self.acc, self.stack_ptr, self.data_bank, self.program_bank, self.direct_page,
         );
     }
