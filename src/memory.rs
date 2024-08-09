@@ -21,9 +21,7 @@ pub struct InvalidAddressError {
 }
 
 impl InvalidAddressError {
-    pub fn new(addr: usize) -> Self {
-        Self { addr }
-    }
+    pub fn new(addr: usize) -> Self { Self { addr } }
 }
 
 impl fmt::Display for InvalidAddressError {
@@ -183,7 +181,8 @@ pub fn compose_address(bank: u8, byte_addr: u16) -> usize {
 pub fn address_is_valid(address: usize) -> Result<(), InvalidAddressError> {
     if address < MEMORY_SIZE {
         Ok(())
-    } else {
+    }
+    else {
         println!("Error");
         Err(InvalidAddressError::new(address))
     }

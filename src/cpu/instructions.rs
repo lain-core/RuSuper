@@ -41,10 +41,10 @@ pub(super) struct CpuInstructionFnArguments<'a> {
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum CpuParamWidth {
     Variable = 0, // Paramater is variable width (depends on ALU setting)
-    None = 1,
-    Byte = 2, // Parameter is 8-bit (1 Byte)
-    Word = 3, // Parameter is 16-bit (1 Word)
-    Long = 4, // Parameter is 24-bit (long)
+    None     = 1,
+    Byte     = 2, // Parameter is 8-bit (1 Byte)
+    Word     = 3, // Parameter is 16-bit (1 Word)
+    Long     = 4, // Parameter is 24-bit (long)
 }
 
 /// A conglomerate wrapper of the prior enums.
@@ -1437,7 +1437,8 @@ pub(super) fn execute(
             registers::REGISTER_MODE_8_BIT => CpuParamWidth::Byte as u16,
             registers::REGISTER_MODE_16_BIT => CpuParamWidth::Word as u16,
         }
-    } else {
+    }
+    else {
         inst.width as u16
     };
 

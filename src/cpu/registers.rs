@@ -57,9 +57,7 @@ impl CpuRegisters {
     }
 
     /// Step the PC by `count` steps.
-    pub fn _step_pc(&mut self, count: u16) {
-        self.pc += count
-    }
+    pub fn _step_pc(&mut self, count: u16) { self.pc += count }
 
     /// Set a target flag.
     /// Parameters:
@@ -91,28 +89,24 @@ impl CpuRegisters {
     /// Returns:
     ///     - `false`: if flag is currently un-set
     ///     - `true`: if flag is currently set
-    pub fn get_flag(&self, flag: StatusFlags) -> bool {
-        self.status.flags[flag as usize]
-    }
+    pub fn get_flag(&self, flag: StatusFlags) -> bool { self.status.flags[flag as usize] }
 
     /// Get the stored register value of all of the flags.
-    pub fn _get_flag_vals(&self) -> u8 {
-        self.status.value.0
-    }
+    pub fn _get_flag_vals(&self) -> u8 { self.status.value.0 }
 }
 
 /// Status Flags.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatusFlags {
-    Carry = 0,
-    Zero = 1,
+    Carry       = 0,
+    Zero        = 1,
     _IRQDisable = 2,
-    _Decimal = 3,
-    _IndexSize = 4,
-    AccSize = 5,
-    Overflow = 6,
-    Negative = 7,
+    _Decimal    = 3,
+    _IndexSize  = 4,
+    AccSize     = 5,
+    Overflow    = 6,
+    Negative    = 7,
 }
 
 ///

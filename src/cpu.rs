@@ -43,9 +43,7 @@ impl CpuState {
     }
 
     // Print the state of the CPU.
-    pub fn print_state(&self) {
-        self.registers.print_state();
-    }
+    pub fn print_state(&self) { self.registers.print_state(); }
 }
 /**************************************** File Scope Functions **********************************************************/
 

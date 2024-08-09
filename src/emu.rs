@@ -87,10 +87,12 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     if args.len() > 2 {
         if args[2] == "--no-check" {
             vm.romdata = romdata::load_rom(path, &mut vm.memory, true).unwrap();
-        } else {
+        }
+        else {
             vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
         }
-    } else {
+    }
+    else {
         // Initialize the VM and then load the ROM into memory.
         vm.romdata = romdata::load_rom(path, &mut vm.memory, false).unwrap();
     }
@@ -105,7 +107,8 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
     let debugger_enabled = true;
     if debugger_enabled {
         debugger::run(vm);
-    } else {
+    }
+    else {
         vm.is_running = true;
         while vm.is_running {
             // TODO: Should CPU be threaded or should this file be the king?
