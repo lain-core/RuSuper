@@ -1,7 +1,7 @@
 use std::num::Wrapping;
 
 use super::{
-    memory::{self, Memory},
+    memory::{self},
     registers::{StatusFlags, REGISTER_MODE_16_BIT, REGISTER_MODE_8_BIT},
     CpuInstructionFnArguments, CpuState,
 };

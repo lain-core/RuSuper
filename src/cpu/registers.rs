@@ -2,10 +2,10 @@ use std::num::Wrapping;
 
 /**************************************** Constant Values ***************************************************************/
 
-pub(super) const ALU_8BIT_NEGATIVE_BIT: usize = 7;
-pub(super) const ALU_16BIT_NEGATIVE_BIT: usize = 15;
-pub(super) const ALU_8BIT_CARRY_BIT: usize = 8;
-pub(super) const ALU_16BIT_CARRY_BIT: usize = 16;
+pub(super) const _ALU_8BIT_NEGATIVE_BIT: usize = 7;
+pub(super) const _ALU_16BIT_NEGATIVE_BIT: usize = 15;
+pub(super) const _ALU_8BIT_CARRY_BIT: usize = 8;
+pub(super) const _ALU_16BIT_CARRY_BIT: usize = 16;
 
 pub(super) const REGISTER_MODE_16_BIT: bool = false;
 pub(super) const REGISTER_MODE_8_BIT: bool = true;
@@ -23,8 +23,8 @@ pub(super) const REGISTER_MODE_8_BIT: bool = true;
 #[derive(Debug, Clone, Copy)]
 pub(super) struct CpuRegisters {
     pub(super) acc: Wrapping<u16>,
-    pub(super) index_x: Wrapping<u16>,
-    pub(super) index_y: Wrapping<u16>,
+    pub(super) _index_x: Wrapping<u16>,
+    pub(super) _index_y: Wrapping<u16>,
     pub(super) stack_ptr: Wrapping<u16>,
     pub(super) data_bank: Wrapping<u8>,
     pub(super) direct_page: Wrapping<u16>,
@@ -37,8 +37,8 @@ impl CpuRegisters {
     pub const fn new() -> Self {
         CpuRegisters {
             acc: Wrapping(0),
-            index_x: Wrapping(0),
-            index_y: Wrapping(0),
+            _index_x: Wrapping(0),
+            _index_y: Wrapping(0),
             stack_ptr: Wrapping(0),
             data_bank: Wrapping(0),
             direct_page: Wrapping(0),
@@ -57,7 +57,7 @@ impl CpuRegisters {
     }
 
     /// Step the PC by `count` steps.
-    pub fn step_pc(&mut self, count: u16) {
+    pub fn _step_pc(&mut self, count: u16) {
         self.pc += count
     }
 
@@ -96,7 +96,7 @@ impl CpuRegisters {
     }
 
     /// Get the stored register value of all of the flags.
-    pub fn get_flag_vals(&self) -> u8 {
+    pub fn _get_flag_vals(&self) -> u8 {
         self.status.value.0
     }
 }
@@ -107,9 +107,9 @@ impl CpuRegisters {
 pub enum StatusFlags {
     Carry = 0,
     Zero = 1,
-    IRQDisable = 2,
-    Decimal = 3,
-    IndexSize = 4,
+    _IRQDisable = 2,
+    _Decimal = 3,
+    _IndexSize = 4,
     AccSize = 5,
     Overflow = 6,
     Negative = 7,

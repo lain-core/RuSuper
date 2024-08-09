@@ -76,7 +76,7 @@ enum DebugCommandTypes {
     Step,
     Dump,
     Print,
-    Watch,
+    _Watch,
     Exit,
     Invalid,
 }
@@ -134,7 +134,7 @@ impl DebugFn for DebugCommandTypes {
             DebugCommandTypes::Step => StepCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Dump => todo!(),
             DebugCommandTypes::Print => PrintCommand.debug_op(args, debug, vm),
-            DebugCommandTypes::Watch => todo!(),
+            DebugCommandTypes::_Watch => todo!(),
             DebugCommandTypes::Exit => ExitCommand.debug_op(args, debug, vm),
             DebugCommandTypes::Invalid => InvalidCommand.debug_op(args, debug, vm),
         }

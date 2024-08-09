@@ -1,7 +1,6 @@
 use super::{
-    memory::Memory,
     registers::{StatusFlags, REGISTER_MODE_16_BIT, REGISTER_MODE_8_BIT},
-    CpuInstructionFnArguments, CpuState,
+    CpuInstructionFnArguments,
 };
 use std::num::Wrapping;
 
@@ -63,6 +62,8 @@ pub(super) fn immediate(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::memory::Memory;
+    use super::super::CpuState;
     use super::*;
     use crate::cpu::instructions::lda;
 

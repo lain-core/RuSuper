@@ -1,8 +1,8 @@
-use super::{parser::*, *};
+use super::*;
 
 /**************************************** Struct and Type definitions ***************************************************/
 pub struct StepData {
-    pub addresses: parser_data::ParserData,
+    pub _addresses: parser_data::ParserData,
     pub is_stepping: bool,
     pub steps_to_run: usize,
 }
@@ -10,7 +10,7 @@ pub struct StepData {
 impl StepData {
     pub fn new() -> Self {
         Self {
-            addresses: parser_data::ParserData::new(),
+            _addresses: parser_data::ParserData::new(),
             is_stepping: false,
             steps_to_run: 0,
         }
@@ -62,7 +62,8 @@ impl DebugFn for StepCommand {
             let sub = StepSubCommandTypes::from(args[0]);
             match sub {
                 StepSubCommandTypes::Step => sub.step_op(args, debug, vm),
-                _ => sub.step_op(&args[1..], debug, vm),
+                // Commented to suppress warning. Unreachable with only one command.
+                // _ => sub.step_op(&args[1..], debug, vm),
             }
         }
     }
@@ -70,7 +71,7 @@ impl DebugFn for StepCommand {
 
 impl StepFn for StepOp {
     fn step_op(
-        &self, _args: &[&str], debug: &mut DebuggerState, vm: &mut VirtualMachine,
+        &self, _args: &[&str], debug: &mut DebuggerState, _vm: &mut VirtualMachine,
     ) -> Result<(), InvalidDbgArgError> {
         debug.step_state.steps_to_run = 1;
         debug.step_state.is_stepping = true;

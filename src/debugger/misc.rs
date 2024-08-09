@@ -1,6 +1,6 @@
 use super::{
-    parser::str_to_values, ContinueCommand, DebugFn, ExitCommand, HelpCommand, InvalidCommand,
-    PrintCommand, VirtualMachine,
+    ContinueCommand, DebugFn, ExitCommand, HelpCommand, InvalidCommand, PrintCommand,
+    VirtualMachine,
 };
 use crate::debugger::InvalidDbgArgError;
 use std::process::exit;
