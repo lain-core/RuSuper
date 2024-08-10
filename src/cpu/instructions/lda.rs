@@ -1,61 +1,151 @@
 use super::{
+    memory,
     registers::{StatusFlags, REGISTER_MODE_16_BIT, REGISTER_MODE_8_BIT},
     CpuInstructionFnArguments,
 };
+use crate::cpu::CpuRegisters;
 use std::num::Wrapping;
 
 /**************************************** File Scope Functions **********************************************************/
 
+/// Update the flags based on the value loaded into the accumulator.
+///
+/// All of the LDA instructions affect the same flags:
+/// n-----z-
+///
+/// Parameters:
+///     - `registers`: A mutable pointer to the register state to set the flags in and read ACC
+///     from.
+fn update_flags(registers: &mut CpuRegisters) {
+    match registers.get_flag(StatusFlags::AccSize) {
+        REGISTER_MODE_8_BIT => match registers.acc.0 as i8 >= 0 {
+            true => {
+                registers.clear_flag(StatusFlags::Negative);
+            }
+            false => {
+                registers.set_flag(StatusFlags::Negative);
+            }
+        },
+        REGISTER_MODE_16_BIT => match registers.acc.0 as i16 >= 0 {
+            true => {
+                registers.clear_flag(StatusFlags::Negative);
+            }
+            false => {
+                registers.set_flag(StatusFlags::Negative);
+            }
+        },
+    }
+}
+
 /**************************************** Public Functions **************************************************************/
 
-/// LDA absolute
+/// LDA immediate
 /// Syntax: LDA #const
 /// Opcode: 0xA9
 /// Bytes: 2 for 8-bit, 3 for 16-bit
 /// Flags affected: n-----z-
+///
+/// Parameters:
+///     - `arg`: Mutable pointer to state of VM and the arguments for this instruction.
+///
+/// Returns:
+///     - `Some(2)`: Number of cycles to pend for an 8-bit LDA.
+///     - `Some(3)`: Number of cycles to pend for a 16-bit LDA.
 pub(super) fn immediate(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
     match arg.cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => {
             let masked_param = arg.param & 0x00FF;
             arg.cpu.registers.acc = Wrapping(masked_param as u16);
-
-            match arg.cpu.registers.acc.0 as i8 >= 0 {
-                true => {
-                    arg.cpu.registers.clear_flag(StatusFlags::Negative);
-                }
-                false => {
-                    arg.cpu.registers.set_flag(StatusFlags::Negative);
-                }
-            }
         }
         REGISTER_MODE_16_BIT => {
             arg.cpu.registers.acc = Wrapping(arg.param);
-
-            match arg.cpu.registers.acc.0 as i16 >= 0 {
-                true => {
-                    arg.cpu.registers.clear_flag(StatusFlags::Negative);
-                }
-                false => {
-                    arg.cpu.registers.set_flag(StatusFlags::Negative);
-                }
-            }
         }
     }
 
     // Update the flags.
-    match arg.cpu.registers.acc.0 == 0 {
-        true => {
-            arg.cpu.registers.set_flag(StatusFlags::Zero);
-        }
-        false => {
-            arg.cpu.registers.clear_flag(StatusFlags::Zero);
-        }
-    }
+    update_flags(&mut arg.cpu.registers);
 
     match arg.cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => Some(2),
         REGISTER_MODE_16_BIT => Some(3),
     }
+}
+
+/// LDA absolute
+/// Syntax: LDA addr
+/// Opcode: 0xAD for bank
+/// Bytes: 3
+/// Flags affected: n-----z-
+///
+/// Load a value from an absolute location in memory, using the prog bank as reference and the
+/// argument as the address within the bank.
+///
+/// Parameters:
+///     - `arg`: Mutable pointer to state of VM and the arguments for this instruction.
+///
+/// Returns:
+///     - `Some(4)`: Number of cycles to pend.
+pub(super) fn absolute(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
+    let value_at_address = arg
+        .memory
+        .get_word(memory::compose_address(
+            arg.cpu.registers.program_bank.0,
+            arg.param,
+        ))
+        .expect("Could not read value from memory");
+
+    arg.cpu.registers.acc = Wrapping(value_at_address);
+
+    update_flags(&mut arg.cpu.registers);
+
+    None
+}
+
+/// LDA absolute long
+/// Syntax: LDA addr
+/// Opcode: 0xAF for long
+/// Bytes: 4
+/// Flags affected: n-----z-
+///
+/// Load a value from an absolute location in memory.
+///
+/// Parameters:
+///     - `arg`: Mutable pointer to state of VM and the arguments for this instruction.
+///
+/// Returns:
+///     - `Some(5)`: Number of cycles to pend.
+pub(super) fn absolute_long(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
+    let value_at_address = arg
+        .memory
+        .get_word(memory::compose_address(
+            arg.bank
+                .expect("Bank was not included with argument passed to instruction"),
+            arg.param,
+        ))
+        .expect("Unable to read value from memory");
+
+    arg.cpu.registers.acc = Wrapping(value_at_address);
+
+    update_flags(&mut arg.cpu.registers);
+
+    Some(5)
+}
+
+/// LDA direct page
+/// Syntax: LDA dp
+/// Opcode: 0xA5
+/// Bytes: 2
+/// Flags affected: n-----z-
+///
+/// Load a value ???
+///
+/// Parameters:
+///     - `arg`: Mutable pointer to state of VM and the arguments for this instruction.
+///
+/// Returns:
+///     - `Some(3)`: Number of cycles to pend.
+pub(super) fn direct_page(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
+    Some(3)
 }
 
 /**************************************** Tests *************************************************************************/
