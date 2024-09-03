@@ -17,23 +17,24 @@ use std::num::Wrapping;
 ///     - `registers`: A mutable pointer to the register state to set the flags in and read ACC
 ///     from.
 fn update_flags(registers: &mut CpuRegisters) {
-    match registers.get_flag(StatusFlags::AccSize) {
-        REGISTER_MODE_8_BIT => match registers.acc.0 as i8 >= 0 {
-            true => {
-                registers.clear_flag(StatusFlags::Negative);
-            }
-            false => {
-                registers.set_flag(StatusFlags::Negative);
-            }
-        },
-        REGISTER_MODE_16_BIT => match registers.acc.0 as i16 >= 0 {
-            true => {
-                registers.clear_flag(StatusFlags::Negative);
-            }
-            false => {
-                registers.set_flag(StatusFlags::Negative);
-            }
-        },
+    let test_value: i16 = match registers.get_flag(StatusFlags::AccSize) {
+        // Cast it to i8 to get value, and then cast as i16 to maintain signed-ness, but return the
+        // same type.
+        REGISTER_MODE_8_BIT => (registers.acc.0 as i8) as i16,
+        REGISTER_MODE_16_BIT => registers.acc.0 as i16,
+    };
+
+    if test_value < 0 {
+        registers.clear_flag(StatusFlags::Zero);
+        registers.set_flag(StatusFlags::Negative);
+    }
+    else if test_value == 0 {
+        registers.set_flag(StatusFlags::Zero);
+        registers.clear_flag(StatusFlags::Negative);
+    }
+    else {
+        registers.clear_flag(StatusFlags::Zero);
+        registers.clear_flag(StatusFlags::Negative);
     }
 }
 
@@ -144,9 +145,7 @@ pub(super) fn absolute_long(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
 ///
 /// Returns:
 ///     - `Some(3)`: Number of cycles to pend.
-pub(super) fn direct_page(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
-    Some(3)
-}
+pub(super) fn direct_page(arg: &mut CpuInstructionFnArguments) -> Option<u8> { Some(3) }
 
 /**************************************** Tests *************************************************************************/
 
