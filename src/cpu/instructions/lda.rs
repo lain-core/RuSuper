@@ -56,7 +56,7 @@ pub(super) fn immediate(arg: &mut CpuInstructionFnArguments) -> Option<u8> {
     match arg.cpu.registers.get_flag(StatusFlags::AccSize) {
         REGISTER_MODE_8_BIT => {
             let masked_param = arg.param & 0x00FF;
-            arg.cpu.registers.acc = Wrapping(masked_param as u16);
+            arg.cpu.registers.acc = Wrapping(masked_param);
         }
         REGISTER_MODE_16_BIT => {
             arg.cpu.registers.acc = Wrapping(arg.param);
