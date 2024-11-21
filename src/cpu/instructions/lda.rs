@@ -4,7 +4,7 @@ use super::{
     CpuInstructionFnArguments,
 };
 use crate::cpu::CpuRegisters;
-use std::num::Wrapping;
+use std::{cmp::Ordering, num::Wrapping};
 
 /**************************************** File Scope Functions **********************************************************/
 
@@ -24,17 +24,19 @@ fn update_flags(registers: &mut CpuRegisters) {
         REGISTER_MODE_16_BIT => registers.acc.0 as i16,
     };
 
-    if test_value < 0 {
-        registers.clear_flag(StatusFlags::Zero);
-        registers.set_flag(StatusFlags::Negative);
-    }
-    else if test_value == 0 {
-        registers.set_flag(StatusFlags::Zero);
-        registers.clear_flag(StatusFlags::Negative);
-    }
-    else {
-        registers.clear_flag(StatusFlags::Zero);
-        registers.clear_flag(StatusFlags::Negative);
+    match test_value.cmp(&0) {
+        Ordering::Less => {
+            registers.clear_flag(StatusFlags::Zero);
+            registers.set_flag(StatusFlags::Negative);
+        }
+        Ordering::Equal => {
+            registers.set_flag(StatusFlags::Zero);
+            registers.clear_flag(StatusFlags::Negative);
+        }
+        Ordering::Greater => {
+            registers.clear_flag(StatusFlags::Zero);
+            registers.clear_flag(StatusFlags::Negative);
+        }
     }
 }
 

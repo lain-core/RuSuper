@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::time;
 
 use crate::cpu;
@@ -128,18 +129,23 @@ pub fn run(path: std::path::PathBuf, args: Vec<String>) {
 pub fn step_cpu(vm: &mut VirtualMachine) -> bool {
     let mut vm_running = true;
     // If there is no need to pend on another cycle, then go ahead and run an operation.
-    if vm.cpu.cycles_to_pend == 0 {
-        vm_running = vm.cpu.step(&mut vm.memory);
-        println!(
-            "Next instruction stalled by {} cycles",
-            vm.cpu.cycles_to_pend
-        );
-    }
-    // Otherwise, punt on operating for however long we need to.
-    else if vm.cpu.cycles_to_pend > 0 {
-        std::thread::sleep(time::Duration::from_secs_f64(vm.clocks.clock_speed));
-        vm.clocks.cpu_clock_cycles_elapsed += 1;
-        vm.cpu.cycles_to_pend -= 1;
+    match vm.cpu.cycles_to_pend.cmp(&0) {
+        Ordering::Less => {
+            // Should never occur.
+            panic!("VM found less than 0 cycles to pend");
+        }
+        Ordering::Equal => {
+            vm_running = vm.cpu.step(&mut vm.memory);
+            println!(
+                "Next instruction stalled by {} cycles",
+                vm.cpu.cycles_to_pend
+            );
+        }
+        Ordering::Greater => {
+            std::thread::sleep(time::Duration::from_secs_f64(vm.clocks.clock_speed));
+            vm.clocks.cpu_clock_cycles_elapsed += 1;
+            vm.cpu.cycles_to_pend -= 1;
+        }
     }
     vm_running
 }

@@ -441,7 +441,7 @@ fn read_rom_to_buf(path: PathBuf) -> Result<Vec<u8>, RomReadError> {
 
     if file.is_ok() {
         let mut buf: Vec<u8> = vec![];
-        let _read_result = match file.unwrap().read_to_end(&mut buf) {
+        match file.unwrap().read_to_end(&mut buf) {
             Ok(_) => {
                 if buf.capacity() != 0 {
                     retval = Ok(buf);
@@ -493,13 +493,13 @@ fn write_rom_to_memory(
             // Populate 0xC00000 - 0xFFFFFF, then mirror half to 0x008000 - 3F8FFFF, and half to 0x808000 - 0xBF8000.
             num_banks = rom.capacity() / HI_ROM_BANK_SIZE_BYTES;
             bank_size = BankSize::Hi;
-            base_addr = compose_address(HI_ROM_BANK_ADDR as u8, 0);
+            base_addr = compose_address(HI_ROM_BANK_ADDR, 0);
         }
         RomSize::LoRom => {
             // Populate 0x808000 - 0xFF8000, then mirror to 0x008000 - 0x7DFFFF
             num_banks = rom.capacity() / LO_ROM_BANK_SIZE_BYTES;
             bank_size = BankSize::Lo;
-            base_addr = compose_address(LO_ROM_BANK_ADDR as u8, ROM_BASE_ADDR);
+            base_addr = compose_address(LO_ROM_BANK_ADDR, ROM_BASE_ADDR);
         }
     }
 
@@ -515,7 +515,7 @@ fn write_rom_to_memory(
             Err(e) => write_result = Err(RomReadError::from(e.to_string())),
         }
     }
-    return write_result;
+    write_result
 }
 
 /// Write rom mirror to correct location.
@@ -563,9 +563,9 @@ fn write_rom_mirror(
     // Iterate through each cluster, and then iterate through the banks in those clusters.
     for cluster in 0..bank_clusters.len() {
         for bank in 0..bank_clusters[cluster] {
-            let mem_offset: usize = bank * LO_ROM_BANK_SIZE_BYTES as usize;
-            let rom_offset: usize = (bank * LO_ROM_BANK_SIZE_BYTES as usize)
-                + (rom_cluster_offset * LO_ROM_BANK_SIZE_BYTES as usize);
+            let mem_offset: usize = bank * LO_ROM_BANK_SIZE_BYTES;
+            let rom_offset: usize =
+                (bank * LO_ROM_BANK_SIZE_BYTES) + (rom_cluster_offset * LO_ROM_BANK_SIZE_BYTES);
             match mem_ptr.put_bank(
                 BankSize::Lo,
                 base_addrs[cluster] + mem_offset,
@@ -578,7 +578,7 @@ fn write_rom_mirror(
         rom_cluster_offset += bank_clusters[cluster];
     }
 
-    return write_result;
+    write_result
 }
 
 /// Write an exhirom to memory.
@@ -591,10 +591,10 @@ fn write_rom_mirror(
 /// # Returns:
 ///     - `Ok()`:           If written Ok.
 ///     - `RomReadError`:   If process failed.
-fn _write_ex_hi_rom(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
-    return Err(RomReadError::from(String::from(
+fn _write_ex_hi_rom(rom: &[u8], mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
+    Err(RomReadError::from(String::from(
         "Unimplemented for ExHiRom",
-    )));
+    )))
 }
 
 /// Write an exhirom mirror into memory.
@@ -607,12 +607,10 @@ fn _write_ex_hi_rom(rom: &Vec<u8>, mem_ptr: &mut memory::Memory) -> Result<(), R
 /// # Returns:
 ///     - `Ok()`:           If written Ok.
 ///     - `RomReadError`:   If process failed.
-fn _write_ex_hi_rom_mirror(
-    rom: &Vec<u8>, mem_ptr: &mut memory::Memory,
-) -> Result<(), RomReadError> {
-    return Err(RomReadError::from(String::from(
+fn _write_ex_hi_rom_mirror(rom: &[u8], mem_ptr: &mut memory::Memory) -> Result<(), RomReadError> {
+    Err(RomReadError::from(String::from(
         "Unimplemented for ExHiRom",
-    )));
+    )))
 }
 
 /// Find and grab the header from target rom if available.
@@ -689,20 +687,19 @@ fn fetch_header(rom: &Vec<u8>) -> Result<RomData, RomReadError> {
             }
         }
     }
-    return retval;
+    retval
 }
 
 /// Take a RomData object, see if this rom has an optional header, and if so, populate those values.
 /// # Parameters:
 ///     - `rom`:        A Rom to pull data from.
 ///     - `data`:       A RomData object.
-fn fetch_opt_header(rom: &Vec<u8>, data: &mut RomData) {
-    let header_addr: usize;
-    match &data.mode.mem_map {
-        RomSize::LoRom => header_addr = LO_ROM_EXT_HEADER_ADDR,
-        RomSize::HiRom => header_addr = HI_ROM_EXT_HEADER_ADDR,
-        RomSize::ExHiRom => header_addr = EX_HI_ROM_EXT_HEADER_ADDR,
-    }
+fn fetch_opt_header(rom: &[u8], data: &mut RomData) {
+    let header_addr: usize = match &data.mode.mem_map {
+        RomSize::LoRom => LO_ROM_EXT_HEADER_ADDR,
+        RomSize::HiRom => HI_ROM_EXT_HEADER_ADDR,
+        RomSize::ExHiRom => EX_HI_ROM_EXT_HEADER_ADDR,
+    };
 
     if data.header[HDR_FIXED_VAL_INDEX] == HDR_OPT_PRESENT {
         data.opt_is_present = true;
@@ -773,20 +770,19 @@ fn populate_rom_mapping(data: &mut RomData) -> Result<(), RomReadError> {
 
     data.mode.expansion = RomExpansions::from(data.mode.coproc);
 
-    return Ok(());
+    Ok(())
 }
 
 /// Fetch the exception vector table from a rom.
 /// # Parameters:
 ///     - `rom`:    Rom to read from.
 ///     - `data`:   Pointer to RomData to populate.
-fn fetch_exception_vectors(rom: &Vec<u8>, data: &mut RomData) {
-    let header_addr: usize;
-    match &data.mode.mem_map {
-        RomSize::LoRom => header_addr = LO_ROM_EXC_VECTOR_ADDR,
-        RomSize::HiRom => header_addr = HI_ROM_EXC_VECTOR_ADDR,
-        RomSize::ExHiRom => header_addr = EX_HI_ROM_EXC_VECTOR_ADDR,
-    }
+fn fetch_exception_vectors(rom: &[u8], data: &mut RomData) {
+    let header_addr: usize = match &data.mode.mem_map {
+        RomSize::LoRom => LO_ROM_EXC_VECTOR_ADDR,
+        RomSize::HiRom => HI_ROM_EXC_VECTOR_ADDR,
+        RomSize::ExHiRom => EX_HI_ROM_EXC_VECTOR_ADDR,
+    };
     data.exception_vectors
         .clone_from_slice(&rom[header_addr..header_addr + EV_LEN_BYTES]);
 }
@@ -831,7 +827,7 @@ fn test_checksum(checksum: u16, header: &Header) -> Result<RomSize, RomReadError
         }
     }
 
-    return retval;
+    retval
 }
 
 /**************************************** Tests *************************************************************************/
@@ -860,12 +856,11 @@ mod tests {
         let mut checksum: u16 = 0;
 
         // Set the map value to match the expected result.
-        let header_map_value: u8;
-        match expected_result {
-            RomSize::LoRom => header_map_value = LOROM_VALUE,
-            RomSize::HiRom => header_map_value = HIROM_VALUE,
-            RomSize::ExHiRom => header_map_value = EXHIROM_VALUE,
-        }
+        let header_map_value: u8 = match expected_result {
+            RomSize::LoRom => LOROM_VALUE,
+            RomSize::HiRom => HIROM_VALUE,
+            RomSize::ExHiRom => EXHIROM_VALUE,
+        };
         test_header[HDR_MAP_MODE_INDEX] = header_map_value;
 
         // Calculate the checksum and complement value.
@@ -899,12 +894,11 @@ mod tests {
         data.header[HDR_FIXED_VAL_INDEX] = HDR_OPT_PRESENT;
 
         // Use the expected size to pass to fetch_opt_header to test against.
-        let header_location: usize;
-        match expected_type {
-            RomSize::LoRom => header_location = LO_ROM_EXT_HEADER_ADDR,
-            RomSize::HiRom => header_location = HI_ROM_EXT_HEADER_ADDR,
-            RomSize::ExHiRom => header_location = EX_HI_ROM_EXT_HEADER_ADDR,
-        }
+        let header_location: usize = match expected_type {
+            RomSize::LoRom => LO_ROM_EXT_HEADER_ADDR,
+            RomSize::HiRom => HI_ROM_EXT_HEADER_ADDR,
+            RomSize::ExHiRom => EX_HI_ROM_EXT_HEADER_ADDR,
+        };
         fetch_opt_header(&test_rom.to_vec(), &mut data);
 
         // Check that every byte in the optional header that was grabbed and the optional header that was generated are equal.
@@ -929,12 +923,11 @@ mod tests {
         // Mark the header so that it matches the expected type.
         data.mode.mem_map = expected_type;
 
-        let header_location: usize;
-        match expected_type {
-            RomSize::LoRom => header_location = LO_ROM_EXC_VECTOR_ADDR,
-            RomSize::HiRom => header_location = HI_ROM_EXC_VECTOR_ADDR,
-            RomSize::ExHiRom => header_location = EX_HI_ROM_EXC_VECTOR_ADDR,
-        }
+        let header_location: usize = match expected_type {
+            RomSize::LoRom => LO_ROM_EXC_VECTOR_ADDR,
+            RomSize::HiRom => HI_ROM_EXC_VECTOR_ADDR,
+            RomSize::ExHiRom => EX_HI_ROM_EXC_VECTOR_ADDR,
+        };
         fetch_exception_vectors(&test_rom.to_vec(), &mut data);
 
         for byte in 0..OPT_HEADER_LEN_BYTES {

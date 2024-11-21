@@ -47,10 +47,7 @@ impl Memory {
 
     /// Print out a few rows of memory.
     pub fn print_bytes(&self, address: Option<usize>) {
-        let start_addr = match address {
-            Some(start) => start,
-            None => 0x808000,
-        };
+        let start_addr = address.unwrap_or(0x808000);
 
         print!("\n0x|");
         for i in 0..16 {
