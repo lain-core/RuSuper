@@ -47,10 +47,7 @@ impl Memory {
 
     /// Print out a few rows of memory.
     pub fn print_bytes(&self, address: Option<usize>) {
-        let start_addr = match address {
-            Some(start) => start,
-            None => 0x808000,
-        };
+        let start_addr = address.unwrap_or(0x808000);
 
         print!("\n0x|");
         for i in 0..16 {
@@ -130,7 +127,7 @@ impl Memory {
     /// # Returns:
     ///     - `Ok(())`:                     If OK.
     ///     - `InvalidAddressError`:        If an invalid address was passed.
-    pub fn _put_word(&mut self, address: usize, word: u16) -> Result<(), InvalidAddressError> {
+    pub fn put_word(&mut self, address: usize, word: u16) -> Result<(), InvalidAddressError> {
         match address_is_valid(address + 1) {
             Ok(_t) => {
                 self.memory[address] = word.to_le_bytes()[0];
@@ -266,7 +263,7 @@ mod tests {
             .try_into()
             .unwrap();
 
-        memory_under_test._put_word(0x000000, 0xAABB).unwrap();
+        memory_under_test.put_word(0x000000, 0xAABB).unwrap();
         assert_eq!(memory_under_test.memory[0], 0xBB);
         assert_eq!(memory_under_test.memory[1], 0xAA);
 
@@ -275,7 +272,7 @@ mod tests {
             if addr % 2 == 0 {
                 rand_word = rand::thread_rng().gen();
                 random_data[addr / 2] = rand_word;
-                memory_under_test._put_word(addr, rand_word).unwrap();
+                memory_under_test.put_word(addr, rand_word).unwrap();
             }
         }
 
@@ -294,7 +291,7 @@ mod tests {
     #[should_panic]
     fn test_put_invalid_word() {
         let mut memory_under_test: Memory = Memory::new();
-        memory_under_test._put_word(MEMORY_SIZE + 1, 0).unwrap();
+        memory_under_test.put_word(MEMORY_SIZE + 1, 0).unwrap();
     }
 
     #[test]
@@ -315,7 +312,7 @@ mod tests {
             if addr % 2 == 0 {
                 rand_word = rand::thread_rng().gen();
                 random_data[addr / 2] = rand_word;
-                memory_under_test._put_word(addr, rand_word).unwrap();
+                memory_under_test.put_word(addr, rand_word).unwrap();
             }
         }
 

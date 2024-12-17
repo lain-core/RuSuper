@@ -606,9 +606,9 @@ pub mod tests {
         pub const TEST_HEX_VALUE_STR: &str = "0A";
         pub const TEST_HEX_VALUE: usize = 0x0A;
 
-        /// Test results for the outcome of each of the tests performed.
+        // Test results for the outcome of each of the tests performed.
 
-        /// The representation of the arguments passed as a vector of strings.
+        // The representation of the arguments passed as a vector of strings.
 
         /// Test cases which are driven purely by numeric literals, represented as string vectors.
         pub fn literal_string_args() -> Vec<Vec<&'static str>> {

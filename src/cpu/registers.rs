@@ -103,7 +103,7 @@ pub enum StatusFlags {
     Zero        = 1,
     _IRQDisable = 2,
     _Decimal    = 3,
-    _IndexSize  = 4,
+    _IndexSize  = 4, // Index Register Size (native only). Break for 6502 mode
     AccSize     = 5,
     Overflow    = 6,
     Negative    = 7,
