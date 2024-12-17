@@ -201,4 +201,52 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_absolute() {
+        let test_cases = vec![
+            //mem addr, value, n, z
+            [0x8000, 0x0000, 0, 1],
+            [0xFFFF, 0xFFFF, 1, 0],
+            [0xB00F, 0xDEE7, 1, 0],
+            [0xABCD, 0xEF01, 0, 0],
+        ];
+
+        let mut test_cpu = CpuState::new();
+        let mut test_mem = Memory::new();
+        test_cpu.registers.set_flag(StatusFlags::AccSize);
+
+        let mut test_args: CpuInstructionFnArguments = CpuInstructionFnArguments {
+            cpu: &mut test_cpu,
+            memory: &mut test_mem,
+            bank: None,
+            param: 0,
+        };
+
+        for case in test_cases {
+            test_args.param = case[0];
+            // Put the target value into memory.
+            test_args.memory.put_word(
+                memory::compose_address(test_args.cpu.registers.program_bank.0, case[0]), case[1]
+            ).unwrap();
+
+            lda::absolute(&mut test_args);
+
+            println!("Test Case: {:?}", case);
+            print!("Testing Result");
+            assert_eq!(case[1], test_args.cpu.registers.acc.0);
+
+            print!(" Testing Flags: ");
+            print!("n, ");
+            assert_eq!(
+                case[2],
+                test_args.cpu.registers.get_flag(StatusFlags::Negative) as u16
+            );
+            println!("z");
+            assert_eq!(
+                case[3],
+                test_args.cpu.registers.get_flag(StatusFlags::Zero) as u16
+            );
+        }
+    }
 }
